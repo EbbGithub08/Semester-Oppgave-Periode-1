@@ -1,8 +1,11 @@
 import pygame
 from pygame.locals import *
+from pygame import mixer
 import pickle
 from os import path
 
+pygame.mixer.pre_init(44100, -16, 2, 512)
+mixer.init()
 pygame.init()
 
 clock = pygame.time.Clock()
@@ -18,6 +21,13 @@ level = 1
 max_levels = 7
 score = 0
 
+font_score = pygame.font.SysFont('Bauhaus 93', 30)
+font = pygame.font.SysFont('Bauhaus 93', 90)
+white = (255, 255, 255)
+red = (255, 0, 0)
+blue = (0, 0, 255)
+
+
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Platformer")
@@ -27,6 +37,21 @@ bg_img = pygame.image.load('platformer_assets/img/sky.png')
 restart_img = pygame.image.load('platformer_assets/img/restart_btn.png')
 start_img = pygame.image.load('platformer_assets/img/start_btn.png')
 exit_img = pygame.image.load('platformer_assets/img/exit_btn.png')
+
+
+pygame.mixer.music.load('platformer_assets/img/music.wav')
+pygame.mixer.music.play(-1, 0.0, 5000)
+coin_fx = pygame.mixer.Sound('platformer_assets/img/coin.wav')
+coin_fx.set_volume(0.5) 
+jump_fx = pygame.mixer.Sound('platformer_assets/img/jump.wav')
+jump_fx.set_volume(0.5) 
+game_over_fx = pygame.mixer.Sound('platformer_assets/img/game_over.wav')
+game_over_fx.set_volume(0.5) 
+
+
+def draw_text(text, font, text_col, x, y):
+    img = font.render(text, True, text_col)
+    screen.blit(img, (x, y))
 
 def reset_level(level):
     player.reset(80, screen_height - 110)
@@ -77,7 +102,8 @@ class Player():
         if game_over == 0:
             key = pygame.key.get_pressed()
             if key[pygame.K_SPACE] and self.on_ground:
-                self.vel_y = -16
+                jump_fx.play()
+                self.vel_y = -20
                 self.on_ground = False
             if key[pygame.K_a]:
                 dx -= 5
@@ -128,9 +154,12 @@ class Player():
 
             if pygame.sprite.spritecollide(self, blob_group, False):
                 game_over = -1
+                game_over_fx.play()
+
 
             if pygame.sprite.spritecollide(self, lava_group, False):
                 game_over = -1
+                game_over_fx.play()
 
             if pygame.sprite.spritecollide(self, exit_group, False):
                 game_over = 1
@@ -142,6 +171,7 @@ class Player():
 
         elif game_over == -1:
             self.image = self.dead_image
+            draw_text('You Died!!!', font, red, (screen_width // 2) - 140, screen_height // 2)
             self.rect.y -= 10
 
 
@@ -277,6 +307,8 @@ lava_group = pygame.sprite.Group()
 coin_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
 
+score_coin = Coin(tile_size // 2, tile_size // 2)
+coin_group.add(score_coin)
 
 if path.exists(f'platformer_assets/level{level}_data'):
     pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
@@ -308,6 +340,11 @@ while run == True:
         world.draw()
         if game_over == 0:
             blob_group.update()
+            if pygame.sprite.spritecollide(player, coin_group, True):
+                score += 1
+                coin_fx.play()
+            draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
+
 
         blob_group.draw(screen)
         lava_group.draw(screen)
@@ -318,11 +355,12 @@ while run == True:
 
         game_over = player.update(game_over)
 
-        if game_over == -1:
+        if game_over == -1: 
             if restart_button.draw():
                 world_data = []
                 world = reset_level(level)
                 game_over = 0
+                score = 0
         
         if game_over == 1:
             level += 1
@@ -331,11 +369,13 @@ while run == True:
                 world = reset_level(level)
                 game_over = 0
             else:
+                draw_text('You win!', font, blue, (screen_width // 2) - 115, screen_height // 2)
                 if restart_button.draw():
                     level = 1
                     world_data = []
                     world = reset_level(level)
                     game_over = 0
+                    score = 0
 
 
     for event in pygame.event.get():
