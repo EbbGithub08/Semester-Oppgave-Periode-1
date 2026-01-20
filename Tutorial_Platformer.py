@@ -3,6 +3,7 @@ from pygame.locals import *
 from pygame import mixer
 import pickle
 from os import path
+import level1, level2
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 mixer.init()
@@ -20,6 +21,9 @@ main_menu = True
 level = 1
 max_levels = 7
 score = 0
+SPIKE_WIDTH = 16
+SPIKE_HEIGHT = 16
+
 
 font_score = pygame.font.SysFont('Bauhaus 93', 30)
 font = pygame.font.SysFont('Bauhaus 93', 90)
@@ -37,6 +41,8 @@ bg_img = pygame.image.load('platformer_assets/img/sky.png')
 restart_img = pygame.image.load('platformer_assets/img/restart_btn.png')
 start_img = pygame.image.load('platformer_assets/img/start_btn.png')
 exit_img = pygame.image.load('platformer_assets/img/exit_btn.png')
+spike_sheet = pygame.image.load("platformer_assets/img/spike.png").convert_alpha()
+
 
 
 pygame.mixer.music.load('platformer_assets/img/music.wav')
@@ -49,6 +55,11 @@ game_over_fx = pygame.mixer.Sound('platformer_assets/img/game_over.wav')
 game_over_fx.set_volume(0.5) 
 
 
+def get_sprite(sheet, x, y, width, height):
+    sprite = pygame.Surface((width, height), pygame.SRCALPHA)
+    sprite.blit(sheet, (0, 0), (x, y, width, height))
+    return sprite
+
 def draw_text(text, font, text_col, x, y):
     img = font.render(text, True, text_col)
     screen.blit(img, (x, y))
@@ -58,9 +69,15 @@ def reset_level(level):
     blob_group.empty()
     lava_group.empty()
     exit_group.empty()
+    platform_group.empty()
+    coin_group.empty()
+    spike_group.empty()
+    coin_group.add(score_coin)
+
     if path.exists(f'platformer_assets/level{level}_data'):
         pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
         world_data = pickle.load(pickle_in)
+
     world = World(world_data)
 
     return world
@@ -98,13 +115,17 @@ class Player():
         dx = 0
         dy = 0
         walk_cooldown = 5
+        col_thresh = 20
+
 
         if game_over == 0:
             key = pygame.key.get_pressed()
             if key[pygame.K_SPACE] and self.on_ground:
                 jump_fx.play()
-                self.vel_y = -20
+                self.vel_y = -18
                 self.on_ground = False
+            if key[pygame.K_SPACE] == False and self.vel_y < -6:
+                self.vel_y = -6
             if key[pygame.K_a]:
                 dx -= 5
                 self.counter += 1
@@ -161,11 +182,28 @@ class Player():
                 game_over = -1
                 game_over_fx.play()
 
+            if pygame.sprite.spritecollide(self, spike_group, False):
+                game_over = -1
+                game_over_fx.play()
+
             if pygame.sprite.spritecollide(self, exit_group, False):
                 game_over = 1
 
+            for platform in platform_group:
+                if platform.rect.colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
+                    dx = 0
+                if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
+                    if abs((self.rect.top) - platform.rect.bottom) < col_thresh:
+                       self.vel_y = 0
+                       dy = platform.rect.bottom - self.rect.top
 
-                    
+                    elif abs((self.rect.bottom + dy) - platform.rect.top) < col_thresh:
+                        self.rect.bottom = platform.rect.top -1
+                        dy = 0
+                        self.on_ground = True
+                        if platform.move_x != 0:
+                            self.rect.x += platform.move_direction
+                       
             self.rect.x += dx
             self.rect.y += dy
 
@@ -176,7 +214,8 @@ class Player():
 
 
 
-        screen.blit(self.image, self.rect)
+        self.draw_rect.center = self.rect.center
+        screen.blit(self.image, self.draw_rect)
         #pygame.draw.rect(screen, (255, 0, 0), self.rect, 2)
 
         return game_over
@@ -194,11 +233,12 @@ class Player():
             self.images_left.append(img_left)
         self.dead_image = pygame.image.load('platformer_assets/img/ghost.png')
         self.image = self.images_right[self.index]
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.width = self.image.get_width()
+        self.draw_rect = self.image.get_rect()
+        self.draw_rect.topleft = (x, y)
+        self.width = self.image.get_width() // 2
         self.height = self.image.get_height()
+        self.rect = pygame.Rect(0, 0, self.width, self.height)
+        self.rect.center = self.draw_rect.center
         self.vel_y = 0
         self.direction = 0
         self.on_ground = False
@@ -234,6 +274,12 @@ class World():
                 if tile == 3:
                     blob = Enemy(col_count * tile_size, row_count * tile_size + 8)
                     blob_group.add(blob)
+                if tile == 4:
+                    platform = Platform(col_count * tile_size, row_count * tile_size, 1, 0)
+                    platform_group.add(platform)
+                if tile == 5:
+                    platform = Platform(col_count * tile_size, row_count * tile_size, 0, 1)
+                    platform_group.add(platform)
                 if tile == 6:
                     lava = Lava(col_count * tile_size, row_count * tile_size + (tile_size // 2))
                     lava_group.add(lava)
@@ -244,6 +290,18 @@ class World():
                     exit = Exit(col_count * tile_size, row_count * tile_size - (19))
                     exit_group.add(exit)
 
+                if tile == 9:
+                    spike = Spike(col_count * tile_size, row_count * tile_size, 0)
+                    spike_group.add(spike)
+                if tile == 10:
+                    spike = Spike(col_count * tile_size, row_count * tile_size, 1)
+                    spike_group.add(spike)
+                if tile == 11:
+                    spike = Spike(col_count * tile_size, row_count * tile_size, 2)
+                    spike_group.add(spike)
+                if tile == 12:
+                    spike = Spike(col_count * tile_size, row_count * tile_size, 3)
+                    spike_group.add(spike)
 
                     
                 col_count += 1
@@ -272,6 +330,29 @@ class Enemy(pygame.sprite.Sprite):
             self.move_direction *= -1
             self.move_counter *= -1
 
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, move_x, move_y):
+        pygame.sprite.Sprite.__init__(self)
+        img = pygame.image.load('platformer_assets/img/platform.png')
+        self.image = pygame.transform.scale(img, (tile_size, tile_size // 2))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.move_direction = 1
+        self.move_counter = 0
+        self.move_x = move_x
+        self.move_y = move_y
+
+
+    def update(self):
+        self.rect.x += self.move_direction * self.move_x
+        self.rect.y += self.move_direction * self.move_y
+        self.move_counter += 1
+        if abs(self.move_counter) > 40:
+            self.move_direction *= -1
+            self.move_counter *= -1
+
+
 class Lava(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
@@ -299,21 +380,30 @@ class Exit(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
 
+class Spike(pygame.sprite.Sprite):
+    def __init__(self, x, y, type):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = get_sprite(spike_sheet, type * SPIKE_WIDTH, 0, SPIKE_WIDTH, SPIKE_HEIGHT)
+        self.image = pygame.transform.scale(self.image, (tile_size, tile_size))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+
 
 
 player = Player(80, screen_height - 110)
 blob_group = pygame.sprite.Group()
+platform_group = pygame.sprite.Group()
 lava_group = pygame.sprite.Group()
 coin_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
+spike_group = pygame.sprite.Group()
 
 score_coin = Coin(tile_size // 2, tile_size // 2)
 coin_group.add(score_coin)
 
-if path.exists(f'platformer_assets/level{level}_data'):
-    pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
-    world_data = pickle.load(pickle_in)
-world = World(world_data)
+world = reset_level(level)
+
 
 restart_button = Button(screen_width // 2 - 50, screen_height // 2 + 100, restart_img)
 start_button = Button(screen_width // 2 - 350, screen_height // 2 + 100, start_img)
@@ -340,15 +430,17 @@ while run == True:
         world.draw()
         if game_over == 0:
             blob_group.update()
+            platform_group.update()
             if pygame.sprite.spritecollide(player, coin_group, True):
                 score += 1
                 coin_fx.play()
             draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
 
-
         blob_group.draw(screen)
+        platform_group.draw(screen)
         lava_group.draw(screen)
         exit_group.draw(screen)
+        spike_group.draw(screen)
         coin_group.draw(screen)
 
 
@@ -357,26 +449,28 @@ while run == True:
 
         if game_over == -1: 
             if restart_button.draw():
-                world_data = []
                 world = reset_level(level)
                 game_over = 0
                 score = 0
         
         if game_over == 1:
             level += 1
-            if level < max_levels:
-                world_data = []
-                world = reset_level(level)
+            if level > max_levels:
+                level = 1
+                restart_button.draw()
+            world = reset_level(level)
+            if world.tile_list:
                 game_over = 0
             else:
-                draw_text('You win!', font, blue, (screen_width // 2) - 115, screen_height // 2)
-                if restart_button.draw():
-                    level = 1
-                    world_data = []
-                    world = reset_level(level)
-                    game_over = 0
-                    score = 0
-
+                game_over = 2
+        
+        if game_over == 2:
+            draw_text('You win!', font, blue, (screen_width // 2) - 115, screen_height // 2)
+            if restart_button.draw():
+                level = 1
+                world = reset_level(level)
+                game_over = 0
+                score = 0
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -386,4 +480,3 @@ while run == True:
 
 
 pygame.quit()
-
