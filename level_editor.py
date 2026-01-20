@@ -47,24 +47,32 @@ black = (0, 0, 0)
 
 font = pygame.font.SysFont('Futura', 24)
 
-# Create empty tile list (blank med bare nuller)
-world_data = []
-for row in range(20):
-	r = [0] * 20
-	world_data.append(r)
+def create_empty_level():
+	# Create empty tile list (blank med bare nuller)
+	data = []
+	for row in range(20):
+		r = [0] * 20
+		data.append(r)
 
-# Create boundary
-for row in range(20):
-	for col in range(20):
-		if row == 0:
-			world_data[row][col] = 1
-		elif row == 19:
-			if col == 0 or col == 19:
-				world_data[row][col] = 1
-			else:
-				world_data[row][col] = 2
-		elif col == 0 or col == 19:
-			world_data[row][col] = 1
+	# Create boundary
+	for row in range(20):
+		for col in range(20):
+			if row == 0:
+				data[row][col] = 1
+			elif row == 19:
+				if col == 0 or col == 19:
+					data[row][col] = 1
+				else:
+					data[row][col] = 2
+			elif col == 0 or col == 19:
+				data[row][col] = 1
+	return data
+
+if path.exists(f'platformer_assets/level{level}_data'):
+	pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
+	world_data = pickle.load(pickle_in)
+else:
+	world_data = create_empty_level()
 
 # Function for outputting text onto the screen
 def draw_text(text, font, text_col, x, y):
@@ -147,14 +155,27 @@ while run:
 		if event.type == pygame.KEYDOWN:
 			if event.key == pygame.K_UP:
 				level += 1
+				if path.exists(f'platformer_assets/level{level}_data'):
+					pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
+					world_data = pickle.load(pickle_in)
+				else:
+					world_data = create_empty_level()
 			if event.key == pygame.K_DOWN and level > 1:
 				level -= 1
+				if path.exists(f'platformer_assets/level{level}_data'):
+					pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
+					world_data = pickle.load(pickle_in)
+				else:
+					world_data = create_empty_level()
 			if event.key == pygame.K_s:
 				# Save level data
-				pickle_out = open(f'platformer_assets/level{level}_data', 'wb')
+				save_level = 1
+				while path.exists(f'platformer_assets/level{save_level}_data'):
+					save_level += 1
+				pickle_out = open(f'platformer_assets/level{save_level}_data', 'wb')
 				pickle.dump(world_data, pickle_out)
 				pickle_out.close()
-				print(f'Level {level} saved!')
+				print(f'Level {save_level} saved!')
 				print('world_data = [')
 				for row in world_data:
 					print(f'{row},')

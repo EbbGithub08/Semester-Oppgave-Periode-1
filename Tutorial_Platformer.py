@@ -3,7 +3,6 @@ from pygame.locals import *
 from pygame import mixer
 import pickle
 from os import path
-import level1, level2
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 mixer.init()
@@ -18,8 +17,8 @@ screen_height = 800
 tile_size = 40
 game_over = 0
 main_menu = True
-level = 1
-max_levels = 7
+level = 4
+max_levels = 10
 score = 0
 SPIKE_WIDTH = 16
 SPIKE_HEIGHT = 16
@@ -48,11 +47,11 @@ spike_sheet = pygame.image.load("platformer_assets/img/spike.png").convert_alpha
 pygame.mixer.music.load('platformer_assets/img/music.wav')
 pygame.mixer.music.play(-1, 0.0, 5000)
 coin_fx = pygame.mixer.Sound('platformer_assets/img/coin.wav')
-coin_fx.set_volume(0.5) 
+coin_fx.set_volume(0.2) 
 jump_fx = pygame.mixer.Sound('platformer_assets/img/jump.wav')
-jump_fx.set_volume(0.5) 
+jump_fx.set_volume(0.2) 
 game_over_fx = pygame.mixer.Sound('platformer_assets/img/game_over.wav')
-game_over_fx.set_volume(0.5) 
+game_over_fx.set_volume(0.2) 
 
 
 def get_sprite(sheet, x, y, width, height):
@@ -77,9 +76,17 @@ def reset_level(level):
     if path.exists(f'platformer_assets/level{level}_data'):
         pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
         world_data = pickle.load(pickle_in)
+    else:
+        world_data = []
+        for row in range(20):
+            r = [0] * 20
+            world_data.append(r)
+        for row in range(20):
+            for col in range(20):
+                if row == 0 or row == 19 or col == 0 or col == 19:
+                    world_data[row][col] = 1
 
     world = World(world_data)
-
     return world
 
 
@@ -388,6 +395,7 @@ class Spike(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
+        self.rect.inflate_ip(-(tile_size // 2), -(tile_size // 2))
 
 
 
@@ -440,7 +448,8 @@ while run == True:
         platform_group.draw(screen)
         lava_group.draw(screen)
         exit_group.draw(screen)
-        spike_group.draw(screen)
+        for spike in spike_group:
+            screen.blit(spike.image, (spike.rect.x - 10, spike.rect.y - 10))
         coin_group.draw(screen)
 
 
@@ -455,11 +464,8 @@ while run == True:
         
         if game_over == 1:
             level += 1
-            if level > max_levels:
-                level = 1
-                restart_button.draw()
-            world = reset_level(level)
-            if world.tile_list:
+            if path.exists(f'platformer_assets/level{level}_data'):
+                world = reset_level(level)
                 game_over = 0
             else:
                 game_over = 2
