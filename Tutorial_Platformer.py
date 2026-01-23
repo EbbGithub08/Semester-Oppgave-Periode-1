@@ -3,6 +3,7 @@ from pygame.locals import *
 from pygame import mixer
 import pickle
 from os import path
+import time
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 mixer.init()
@@ -17,7 +18,7 @@ screen_height = 800
 tile_size = 40
 game_over = 0
 main_menu = True
-level = 4
+level = 1
 max_levels = 10
 score = 0
 SPIKE_WIDTH = 16
@@ -64,7 +65,12 @@ def draw_text(text, font, text_col, x, y):
     screen.blit(img, (x, y))
 
 def reset_level(level):
-    player.reset(80, screen_height - 110)
+    if level == 4:
+        player.reset(screen_width // 2, screen_height - 110)
+    elif level == 5:
+        player.reset(100, 100)
+    else:
+        player.reset(80, screen_height - 110)
     blob_group.empty()
     lava_group.empty()
     exit_group.empty()
@@ -109,6 +115,9 @@ class Button():
         
         if pygame.mouse.get_pressed()[0] == 0:
             self.clicked = False
+        key = pygame.key.get_pressed()
+        if key[pygame.K_SPACE]:
+            action = True
 
         screen.blit(self.image, (self.rect.x, self.rect.y))
         return action
