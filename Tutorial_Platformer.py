@@ -15,12 +15,16 @@ fps = 60
 screen_width = 800
 screen_height = 800
 
+timer_running = False
+start_time = 0
+elapsed_time = 0
 tile_size = 40
 game_over = 0
 main_menu = True
-level = 1
+level = 5
 max_levels = 10
 score = 0
+death_counter = 0
 SPIKE_WIDTH = 16
 SPIKE_HEIGHT = 16
 
@@ -63,6 +67,13 @@ def get_sprite(sheet, x, y, width, height):
 def draw_text(text, font, text_col, x, y):
     img = font.render(text, True, text_col)
     screen.blit(img, (x, y))
+
+def format_time(ms):
+    seconds = ms // 1000
+    minutes = seconds // 60
+    seconds = seconds % 60
+    milliseconds = (ms % 1000) // 10
+    return f"{minutes:02}:{seconds:02}.{milliseconds:02}"
 
 def reset_level(level):
     if level == 4:
@@ -440,18 +451,26 @@ while run == True:
     if main_menu == True:
         if start_button.draw():
             main_menu = False
+            timer_running = True
+            start_time = pygame.time.get_ticks()
         if exit_button.draw():
             run = False
 
     else:
         world.draw()
         if game_over == 0:
+            if timer_running:
+                elapsed_time = pygame.time.get_ticks() - start_time
             blob_group.update()
             platform_group.update()
             if pygame.sprite.spritecollide(player, coin_group, True):
                 score += 1
                 coin_fx.play()
-            draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
+
+        draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
+        time_text = format_time(elapsed_time)
+        draw_text(time_text, font_score, white, screen_width - 180, 12)
+
 
         blob_group.draw(screen)
         platform_group.draw(screen)
@@ -470,6 +489,7 @@ while run == True:
                 world = reset_level(level)
                 game_over = 0
                 score = 0
+
         
         if game_over == 1:
             level += 1
@@ -480,12 +500,15 @@ while run == True:
                 game_over = 2
         
         if game_over == 2:
+            timer_running = False
             draw_text('You win!', font, blue, (screen_width // 2) - 115, screen_height // 2)
             if restart_button.draw():
                 level = 1
                 world = reset_level(level)
                 game_over = 0
                 score = 0
+                start_time = pygame.time.get_ticks()
+                timer_running = True
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
