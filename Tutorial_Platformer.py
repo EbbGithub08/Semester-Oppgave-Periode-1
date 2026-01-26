@@ -20,12 +20,12 @@ tile_size = 40
 game_over = 0
 main_menu = True
 game_over_time = 0
-level = 1
+level = 3
 start_level = level
 max_levels = 10
 score = 0
 death_counter = 0
-selected_world = 1
+selected_world = 0
 world_select = False
 SPIKE_WIDTH = 16
 SPIKE_HEIGHT = 16
@@ -36,6 +36,8 @@ font = pygame.font.SysFont('Bauhaus 93', 90)
 white = (255, 255, 255)
 red = (255, 0, 0)
 blue = (0, 0, 255)
+yellow = (255, 255, 0)
+
 
 
 
@@ -50,6 +52,7 @@ exit_img = pygame.image.load('img/exit_btn.png')
 world1_img = pygame.transform.scale(pygame.image.load('img/world1.png'), (200, 300))
 world2_img = pygame.transform.scale(pygame.image.load('img/world2.png'), (200, 300))
 world3_img = pygame.transform.scale(pygame.image.load('img/world3.png'), (200, 300))
+tutorial_img = pygame.transform.scale(pygame.image.load('img/tutorial.png'), (300, 200))
 spike_sheet = pygame.image.load("img/spike.png").convert_alpha()
 death_skull = pygame.image.load('img/skull.png')
 
@@ -90,10 +93,16 @@ def reset_level(level):
 
     # Custom spawn locations
     if selected_world == 2:
-        if level == 3:
+        if level == 1:
+            x = screen_width // 2
+            y = 700
+        elif level == 2:
             x = screen_width - 560
             y = 700
-    if selected_world == 3:
+        elif level == 3:
+            x = 80
+            y = 700
+    elif selected_world == 3:
         if level == 2:
             x = screen_width // 2
         if level == 3:
@@ -471,9 +480,10 @@ world = reset_level(level)
 restart_button = Button(screen_width // 2 - 50, screen_height // 2 + 100, restart_img)
 start_button = Button(screen_width // 2 - 350, screen_height // 2 + 100, start_img)
 exit_button = Button(screen_width // 2 + 100, screen_height // 2 + 100, exit_img)
-world1_button = Button(50, screen_height // 2 - 100, world1_img)
-world2_button = Button(300, screen_height // 2 - 100, world2_img)
-world3_button = Button(550, screen_height // 2 - 100, world3_img)
+world1_button = Button(50, screen_height // 2 - 150, world1_img)
+world2_button = Button(300, screen_height // 2 - 150, world2_img)
+world3_button = Button(550, screen_height // 2 - 150, world3_img)
+tutorial_button = Button(screen_width // 2 - 159, 550, tutorial_img)
 death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
 
 run = True
@@ -499,7 +509,7 @@ while run == True:
             run = False
 
     elif world_select == True:
-        draw_text('Select World', font, blue, (screen_width // 2) - 200, screen_height // 2 - 150)
+        draw_text('Select World', font, yellow, (screen_width // 2) - 200, screen_height // 2 - 250)
         if world1_button.draw():
             selected_world = 1
             world_select = False
@@ -522,6 +532,16 @@ while run == True:
             world = reset_level(level)
         if world3_button.draw():
             selected_world = 3
+            world_select = False
+            timer_running = True
+            start_time = pygame.time.get_ticks()
+            level = start_level
+            game_over = 0
+            score = 0
+            death_counter = 0
+            world = reset_level(level)
+        if tutorial_button.draw():
+            selected_world = 4
             world_select = False
             timer_running = True
             start_time = pygame.time.get_ticks()
@@ -569,6 +589,9 @@ while run == True:
         if game_over == -1: 
             if restart_button.draw():
                 world = reset_level(level)
+                if level == 1:
+                    start_time = pygame.time.get_ticks()
+                    timer_running = True
                 death_counter += 1
                 game_over = 0
                 score = 0

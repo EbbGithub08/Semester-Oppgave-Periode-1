@@ -39,7 +39,7 @@ spike_img4 = spike_img.subsurface(48, 0, 16, 16)
 # Define global variables
 clicked = False
 level = 1
-world_num = 1
+world_num = 2
 
 # Define colors
 white = (255, 255, 255)
