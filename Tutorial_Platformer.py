@@ -21,7 +21,8 @@ elapsed_time = 0
 tile_size = 40
 game_over = 0
 main_menu = True
-level = 5
+game_over_time = 0
+level = 1
 max_levels = 10
 score = 0
 death_counter = 0
@@ -40,22 +41,24 @@ blue = (0, 0, 255)
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Platformer")
 
-sun_img = pygame.image.load('platformer_assets/img/sun.png')
-bg_img = pygame.image.load('platformer_assets/img/sky.png')
-restart_img = pygame.image.load('platformer_assets/img/restart_btn.png')
-start_img = pygame.image.load('platformer_assets/img/start_btn.png')
-exit_img = pygame.image.load('platformer_assets/img/exit_btn.png')
-spike_sheet = pygame.image.load("platformer_assets/img/spike.png").convert_alpha()
+sun_img = pygame.image.load('img/sun.png')
+bg_img = pygame.image.load('img/sky.png')
+restart_img = pygame.image.load('img/restart_btn.png')
+start_img = pygame.image.load('img/start_btn.png')
+exit_img = pygame.image.load('img/exit_btn.png')
+spike_sheet = pygame.image.load("img/spike.png").convert_alpha()
+death_skull = pygame.image.load('img/skull.png')
 
 
 
-pygame.mixer.music.load('platformer_assets/img/music.wav')
+
+pygame.mixer.music.load('img/music.wav')
 pygame.mixer.music.play(-1, 0.0, 5000)
-coin_fx = pygame.mixer.Sound('platformer_assets/img/coin.wav')
+coin_fx = pygame.mixer.Sound('img/coin.wav')
 coin_fx.set_volume(0.2) 
-jump_fx = pygame.mixer.Sound('platformer_assets/img/jump.wav')
+jump_fx = pygame.mixer.Sound('img/jump.wav')
 jump_fx.set_volume(0.2) 
-game_over_fx = pygame.mixer.Sound('platformer_assets/img/game_over.wav')
+game_over_fx = pygame.mixer.Sound('img/game_over.wav')
 game_over_fx.set_volume(0.2) 
 
 
@@ -65,7 +68,7 @@ def get_sprite(sheet, x, y, width, height):
     return sprite
 
 def draw_text(text, font, text_col, x, y):
-    img = font.render(text, True, text_col)
+    img = font.render(str(text), True, text_col)
     screen.blit(img, (x, y))
 
 def format_time(ms):
@@ -80,6 +83,10 @@ def reset_level(level):
         player.reset(screen_width // 2, screen_height - 110)
     elif level == 5:
         player.reset(100, 100)
+    elif level == 6:
+        player.reset(screen_width // 2, screen_height - 110)
+    elif level == 8:
+        player.reset(screen_width - 560, screen_height - 110)
     else:
         player.reset(80, screen_height - 110)
     blob_group.empty()
@@ -90,8 +97,8 @@ def reset_level(level):
     spike_group.empty()
     coin_group.add(score_coin)
 
-    if path.exists(f'platformer_assets/level{level}_data'):
-        pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
+    if path.exists(f'World_Data/level{level}_data'):
+        pickle_in = open(f'World_data/level{level}_data', 'rb')
         world_data = pickle.load(pickle_in)
     else:
         world_data = []
@@ -127,7 +134,7 @@ class Button():
         if pygame.mouse.get_pressed()[0] == 0:
             self.clicked = False
         key = pygame.key.get_pressed()
-        if key[pygame.K_SPACE]:
+        if key[pygame.K_SPACE] and (game_over == 0 or pygame.time.get_ticks() - game_over_time > 400):
             action = True
 
         screen.blit(self.image, (self.rect.x, self.rect.y))
@@ -147,28 +154,36 @@ class Player():
 
         if game_over == 0:
             key = pygame.key.get_pressed()
-            if key[pygame.K_SPACE] and self.on_ground:
+            if (key[pygame.K_SPACE] or key[pygame.K_w] or key[pygame.K_UP]) and self.on_ground:
                 jump_fx.play()
                 self.vel_y = -18
                 self.on_ground = False
-            if key[pygame.K_SPACE] == False and self.vel_y < -6:
+            if not (key[pygame.K_SPACE] or key[pygame.K_w] or key[pygame.K_UP]) and self.vel_y < -6:
                 self.vel_y = -6
-            if key[pygame.K_a]:
-                dx -= 5
+            if key[pygame.K_a] or key[pygame.K_LEFT]:
+                self.vel_x -= 1
                 self.counter += 1
                 self.direction = -1
-            if key[pygame.K_d]:
-                dx += 5
+            if key[pygame.K_d] or key[pygame.K_RIGHT]:
+                self.vel_x += 1
                 self.counter += 1
                 self.direction = 1
-            if key[pygame.K_a] == False and key[pygame.K_d] == False:
-                self.counter = 0
-                self.index = 0
-                if self.direction == 1:
-                    self.image = self.images_right[self.index]
-                if self.direction == -1:
-                    self.image = self.images_left[self.index]
+            if not (key[pygame.K_a] or key[pygame.K_LEFT]) and not (key[pygame.K_d] or key[pygame.K_RIGHT]):
+                if self.vel_x > 0:
+                    self.vel_x -= 2
+                    if self.vel_x < 0:
+                        self.vel_x = 0
+                elif self.vel_x < 0:
+                    self.vel_x += 2
+                    if self.vel_x > 0:
+                        self.vel_x = 0
 
+            if self.vel_x > 5:
+                self.vel_x = 5
+            if self.vel_x < -5:
+                self.vel_x = -5
+
+            dx += int(self.vel_x)
 
             self.on_ground = False
 
@@ -253,12 +268,12 @@ class Player():
         self.index = 0
         self.counter = 0
         for num in range(1, 5):
-            img_right = pygame.image.load(f'platformer_assets/img/guy{num}.png')
+            img_right = pygame.image.load(f'img/guy{num}.png')
             img_right = pygame.transform.scale(img_right, (32, 64))
             img_left = pygame.transform.flip(img_right, True, False)
             self.images_right.append(img_right)
             self.images_left.append(img_left)
-        self.dead_image = pygame.image.load('platformer_assets/img/ghost.png')
+        self.dead_image = pygame.image.load('img/ghost.png')
         self.image = self.images_right[self.index]
         self.draw_rect = self.image.get_rect()
         self.draw_rect.topleft = (x, y)
@@ -267,6 +282,7 @@ class Player():
         self.rect = pygame.Rect(0, 0, self.width, self.height)
         self.rect.center = self.draw_rect.center
         self.vel_y = 0
+        self.vel_x = 0
         self.direction = 0
         self.on_ground = False
 
@@ -276,8 +292,8 @@ class World():
         self.tile_list = []
 
 
-        dirt_img = pygame.image.load('platformer_assets/img/dirt.png')
-        grass_img = pygame.image.load('platformer_assets/img/grass.png')
+        dirt_img = pygame.image.load('img/dirt.png')
+        grass_img = pygame.image.load('img/grass.png')
 
 
         row_count = 0
@@ -343,7 +359,7 @@ class World():
 class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.image.load('platformer_assets/img/blob.png')
+        self.image = pygame.image.load('img/blob.png')
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -360,7 +376,7 @@ class Enemy(pygame.sprite.Sprite):
 class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, move_x, move_y):
         pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('platformer_assets/img/platform.png')
+        img = pygame.image.load('img/platform.png')
         self.image = pygame.transform.scale(img, (tile_size, tile_size // 2))
         self.rect = self.image.get_rect()
         self.rect.x = x
@@ -383,7 +399,7 @@ class Platform(pygame.sprite.Sprite):
 class Lava(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('platformer_assets/img/lava.png')
+        img = pygame.image.load('img/lava.png')
         self.image = pygame.transform.scale(img, (tile_size, tile_size // 2))
         self.rect = self.image.get_rect()
         self.rect.x = x
@@ -392,7 +408,7 @@ class Lava(pygame.sprite.Sprite):
 class Coin(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('platformer_assets/img/coin.png')
+        img = pygame.image.load('img/coin.png')
         self.image = pygame.transform.scale(img, (tile_size // 2, tile_size // 2))
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
@@ -401,7 +417,7 @@ class Coin(pygame.sprite.Sprite):
 class Exit(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('platformer_assets/img/exit.png')
+        img = pygame.image.load('img/exit.png')
         self.image = pygame.transform.scale(img, (tile_size, tile_size * 1.5))
         self.rect = self.image.get_rect()
         self.rect.x = x
@@ -436,6 +452,7 @@ world = reset_level(level)
 restart_button = Button(screen_width // 2 - 50, screen_height // 2 + 100, restart_img)
 start_button = Button(screen_width // 2 - 350, screen_height // 2 + 100, start_img)
 exit_button = Button(screen_width // 2 + 100, screen_height // 2 + 100, exit_img)
+death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
 
 run = True
 while run == True:
@@ -447,6 +464,7 @@ while run == True:
     screen.fill((0, 0, 0))
     screen.blit(bg_img, (0, 0))
     screen.blit(sun_img, (100, 100))
+
 
     if main_menu == True:
         if start_button.draw():
@@ -469,7 +487,9 @@ while run == True:
 
         draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
         time_text = format_time(elapsed_time)
-        draw_text(time_text, font_score, white, screen_width - 180, 12)
+        draw_text(time_text, font_score, white, screen_width - 220, 12)
+        draw_text(death_counter, font_score, red, screen_width - 50, 12)
+        screen.blit(death_img, (screen_width - 90, 0))
 
 
         blob_group.draw(screen)
@@ -482,22 +502,29 @@ while run == True:
 
 
 
-        game_over = player.update(game_over)
+        if game_over == 0:
+            game_over = player.update(game_over)
+            if game_over == -1:
+                game_over_time = pygame.time.get_ticks()
+        else:
+            game_over = player.update(game_over)
 
         if game_over == -1: 
             if restart_button.draw():
                 world = reset_level(level)
+                death_counter += 1
                 game_over = 0
                 score = 0
 
         
         if game_over == 1:
             level += 1
-            if path.exists(f'platformer_assets/level{level}_data'):
+            if path.exists(f'World_Data/level{level}_data'):
                 world = reset_level(level)
                 game_over = 0
             else:
                 game_over = 2
+                game_over_time = pygame.time.get_ticks()
         
         if game_over == 2:
             timer_running = False
@@ -507,6 +534,7 @@ while run == True:
                 world = reset_level(level)
                 game_over = 0
                 score = 0
+                death_counter = 0
                 start_time = pygame.time.get_ticks()
                 timer_running = True
 

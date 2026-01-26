@@ -18,19 +18,19 @@ screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption('Level Editor')
 
 # Load images
-sun_img = pygame.image.load('platformer_assets/img/sun.png')
+sun_img = pygame.image.load('img/sun.png')
 sun_img = pygame.transform.scale(sun_img, (tile_size, tile_size))
-bg_img = pygame.image.load('platformer_assets/img/sky.png')
+bg_img = pygame.image.load('img/sky.png')
 bg_img = pygame.transform.scale(bg_img, (screen_width, screen_height - margin))
-dirt_img = pygame.image.load('platformer_assets/img/dirt.png')
-grass_img = pygame.image.load('platformer_assets/img/grass.png')
-blob_img = pygame.image.load('platformer_assets/img/blob.png')
-platform_x_img = pygame.image.load('platformer_assets/img/platform.png')
-platform_y_img = pygame.image.load('platformer_assets/img/platform.png')
-lava_img = pygame.image.load('platformer_assets/img/lava.png')
-coin_img = pygame.image.load('platformer_assets/img/coin.png')
-exit_img = pygame.image.load('platformer_assets/img/exit.png')
-spike_img = pygame.image.load('platformer_assets/img/spike.png')
+dirt_img = pygame.image.load('img/dirt.png')
+grass_img = pygame.image.load('img/grass.png')
+blob_img = pygame.image.load('img/blob.png')
+platform_x_img = pygame.image.load('img/platform.png')
+platform_y_img = pygame.image.load('img/platform.png')
+lava_img = pygame.image.load('img/lava.png')
+coin_img = pygame.image.load('img/coin.png')
+exit_img = pygame.image.load('img/exit.png')
+spike_img = pygame.image.load('img/spike.png')
 spike_img1 = spike_img.subsurface(0, 0, 16, 16)
 spike_img2 = spike_img.subsurface(16, 0, 16, 16)
 spike_img3 = spike_img.subsurface(32, 0, 16, 16)
@@ -68,8 +68,8 @@ def create_empty_level():
 				data[row][col] = 1
 	return data
 
-if path.exists(f'platformer_assets/level{level}_data'):
-	pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
+if path.exists(f'World_Data/level{level}_data'):
+	pickle_in = open(f'World_Data/level{level}_data', 'rb')
 	world_data = pickle.load(pickle_in)
 else:
 	world_data = create_empty_level()
@@ -155,24 +155,24 @@ while run:
 		if event.type == pygame.KEYDOWN:
 			if event.key == pygame.K_UP:
 				level += 1
-				if path.exists(f'platformer_assets/level{level}_data'):
-					pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
+				if path.exists(f'World_Data/level{level}_data'):
+					pickle_in = open(f'World_Data/level{level}_data', 'rb')
 					world_data = pickle.load(pickle_in)
 				else:
 					world_data = create_empty_level()
 			if event.key == pygame.K_DOWN and level > 1:
 				level -= 1
-				if path.exists(f'platformer_assets/level{level}_data'):
-					pickle_in = open(f'platformer_assets/level{level}_data', 'rb')
+				if path.exists(f'World_Data/level{level}_data'):
+					pickle_in = open(f'World_Data/level{level}_data', 'rb')
 					world_data = pickle.load(pickle_in)
 				else:
 					world_data = create_empty_level()
 			if event.key == pygame.K_s:
 				# Save level data
 				save_level = 1
-				while path.exists(f'platformer_assets/level{save_level}_data'):
+				while path.exists(f'World_Data/level{save_level}_data'):
 					save_level += 1
-				pickle_out = open(f'platformer_assets/level{save_level}_data', 'wb')
+				pickle_out = open(f'World_Data/level{save_level}_data', 'wb')
 				pickle.dump(world_data, pickle_out)
 				pickle_out.close()
 				print(f'Level {save_level} saved!')
