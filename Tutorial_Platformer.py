@@ -3,12 +3,10 @@ from pygame.locals import *
 from pygame import mixer
 import pickle
 from os import path
-import time
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 mixer.init()
 pygame.init()
-
 clock = pygame.time.Clock()
 fps = 60
 
@@ -23,9 +21,12 @@ game_over = 0
 main_menu = True
 game_over_time = 0
 level = 1
+start_level = level
 max_levels = 10
 score = 0
 death_counter = 0
+selected_world = 1
+world_select = False
 SPIKE_WIDTH = 16
 SPIKE_HEIGHT = 16
 
@@ -46,6 +47,9 @@ bg_img = pygame.image.load('img/sky.png')
 restart_img = pygame.image.load('img/restart_btn.png')
 start_img = pygame.image.load('img/start_btn.png')
 exit_img = pygame.image.load('img/exit_btn.png')
+world1_img = pygame.transform.scale(pygame.image.load('img/world1.png'), (200, 300))
+world2_img = pygame.transform.scale(pygame.image.load('img/world2.png'), (200, 300))
+world3_img = pygame.transform.scale(pygame.image.load('img/world3.png'), (200, 300))
 spike_sheet = pygame.image.load("img/spike.png").convert_alpha()
 death_skull = pygame.image.load('img/skull.png')
 
@@ -79,16 +83,25 @@ def format_time(ms):
     return f"{minutes:02}:{seconds:02}.{milliseconds:02}"
 
 def reset_level(level):
-    if level == 4:
-        player.reset(screen_width // 2, screen_height - 110)
-    elif level == 5:
-        player.reset(100, 100)
-    elif level == 6:
-        player.reset(screen_width // 2, screen_height - 110)
-    elif level == 8:
-        player.reset(screen_width - 560, screen_height - 110)
-    else:
-        player.reset(80, screen_height - 110)
+
+    # Default spawn location
+    x = 80
+    y = screen_height - 110
+
+    # Custom spawn locations
+    if selected_world == 2:
+        if level == 3:
+            x = screen_width - 560
+            y = 700
+    if selected_world == 3:
+        if level == 2:
+            x = screen_width // 2
+        if level == 3:
+            x = 100
+            y = 100
+            
+    player.reset(x, y)
+
     blob_group.empty()
     lava_group.empty()
     exit_group.empty()
@@ -97,10 +110,16 @@ def reset_level(level):
     spike_group.empty()
     coin_group.add(score_coin)
 
-    if path.exists(f'World_Data/level{level}_data'):
-        pickle_in = open(f'World_data/level{level}_data', 'rb')
+    # Determine file path based on selected world
+    file_path = f'World_Data/World{selected_world}/level{level}_data'
+
+    print(f"Loading level from: {file_path}") # Debugging: Se hvilken fil den leter etter
+
+    if path.exists(file_path):
+        pickle_in = open(file_path, 'rb')
         world_data = pickle.load(pickle_in)
     else:
+        print(f"File not found: {file_path}. Loading empty world.") # Debugging: Filen mangler
         world_data = []
         for row in range(20):
             r = [0] * 20
@@ -452,6 +471,9 @@ world = reset_level(level)
 restart_button = Button(screen_width // 2 - 50, screen_height // 2 + 100, restart_img)
 start_button = Button(screen_width // 2 - 350, screen_height // 2 + 100, start_img)
 exit_button = Button(screen_width // 2 + 100, screen_height // 2 + 100, exit_img)
+world1_button = Button(50, screen_height // 2 - 100, world1_img)
+world2_button = Button(300, screen_height // 2 - 100, world2_img)
+world3_button = Button(550, screen_height // 2 - 100, world3_img)
 death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
 
 run = True
@@ -469,10 +491,45 @@ while run == True:
     if main_menu == True:
         if start_button.draw():
             main_menu = False
-            timer_running = True
-            start_time = pygame.time.get_ticks()
+            world_select = True
+            world1_button.clicked = True
+            world2_button.clicked = True
+            world3_button.clicked = True
         if exit_button.draw():
             run = False
+
+    elif world_select == True:
+        draw_text('Select World', font, blue, (screen_width // 2) - 200, screen_height // 2 - 150)
+        if world1_button.draw():
+            selected_world = 1
+            world_select = False
+            timer_running = True
+            start_time = pygame.time.get_ticks()
+            level = start_level
+            game_over = 0
+            score = 0
+            death_counter = 0
+            world = reset_level(level)
+        if world2_button.draw():
+            selected_world = 2
+            world_select = False
+            timer_running = True
+            start_time = pygame.time.get_ticks()
+            level = start_level
+            game_over = 0
+            score = 0
+            death_counter = 0
+            world = reset_level(level)
+        if world3_button.draw():
+            selected_world = 3
+            world_select = False
+            timer_running = True
+            start_time = pygame.time.get_ticks()
+            level = start_level
+            game_over = 0
+            score = 0
+            death_counter = 0
+            world = reset_level(level)
 
     else:
         world.draw()
@@ -519,7 +576,10 @@ while run == True:
         
         if game_over == 1:
             level += 1
-            if path.exists(f'World_Data/level{level}_data'):
+            # Check for next level existence based on world
+            next_level_path = f'World_Data/World{selected_world}/level{level}_data'
+
+            if path.exists(next_level_path):
                 world = reset_level(level)
                 game_over = 0
             else:

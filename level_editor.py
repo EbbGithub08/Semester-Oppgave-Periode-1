@@ -39,6 +39,7 @@ spike_img4 = spike_img.subsurface(48, 0, 16, 16)
 # Define global variables
 clicked = False
 level = 1
+world_num = 1
 
 # Define colors
 white = (255, 255, 255)
@@ -68,16 +69,19 @@ def create_empty_level():
 				data[row][col] = 1
 	return data
 
-if path.exists(f'World_Data/level{level}_data'):
-	pickle_in = open(f'World_Data/level{level}_data', 'rb')
-	world_data = pickle.load(pickle_in)
-else:
-	world_data = create_empty_level()
-
 # Function for outputting text onto the screen
 def draw_text(text, font, text_col, x, y):
 	img = font.render(text, True, text_col)
 	screen.blit(img, (x, y))
+
+def load_level_data(world, level_num):
+	file_path = f'World_Data/World{world}/level{level_num}_data'
+	if path.exists(file_path):
+		with open(file_path, 'rb') as pickle_in:
+			return pickle.load(pickle_in)
+	return create_empty_level()
+
+world_data = load_level_data(world_num, level)
 
 def draw_grid():
 	for c in range(21):
@@ -143,9 +147,9 @@ while run:
 	draw_world()
 
 	# Text for instructions
-	draw_text(f'Level: {level}', font, white, 10, screen_height - 35)
-	draw_text('Press UP/DOWN to change', font, white, 200, screen_height - 35)
-	draw_text('Press S to Save', font, white, 550, screen_height - 35)
+	draw_text(f'World: {world_num}  Level: {level}', font, white, 10, screen_height - 40)
+	draw_text('UP/DOWN: Change Level | LEFT/RIGHT: Change World', font, white, 250, screen_height - 40)
+	draw_text('S: Save Level', font, white, 650, screen_height - 40)
 
 	# Event handler
 	for event in pygame.event.get():
@@ -155,31 +159,24 @@ while run:
 		if event.type == pygame.KEYDOWN:
 			if event.key == pygame.K_UP:
 				level += 1
-				if path.exists(f'World_Data/level{level}_data'):
-					pickle_in = open(f'World_Data/level{level}_data', 'rb')
-					world_data = pickle.load(pickle_in)
-				else:
-					world_data = create_empty_level()
+				world_data = load_level_data(world_num, level)
 			if event.key == pygame.K_DOWN and level > 1:
 				level -= 1
-				if path.exists(f'World_Data/level{level}_data'):
-					pickle_in = open(f'World_Data/level{level}_data', 'rb')
-					world_data = pickle.load(pickle_in)
-				else:
-					world_data = create_empty_level()
+				world_data = load_level_data(world_num, level)
+			if event.key == pygame.K_RIGHT:
+				world_num += 1
+				level = 1
+				world_data = load_level_data(world_num, level)
+			if event.key == pygame.K_LEFT and world_num > 1:
+				world_num -= 1
+				level = 1
+				world_data = load_level_data(world_num, level)
 			if event.key == pygame.K_s:
 				# Save level data
-				save_level = 1
-				while path.exists(f'World_Data/level{save_level}_data'):
-					save_level += 1
-				pickle_out = open(f'World_Data/level{save_level}_data', 'wb')
-				pickle.dump(world_data, pickle_out)
-				pickle_out.close()
-				print(f'Level {save_level} saved!')
-				print('world_data = [')
-				for row in world_data:
-					print(f'{row},')
-				print(']')
+				file_path = f'World_Data/World{world_num}/level{level}_data'
+				with open(file_path, 'wb') as pickle_out:
+					pickle.dump(world_data, pickle_out)
+				print(f'Level {level} for world {world_num} saved to {file_path}')
 			
 			# Tile placement
 			pos = pygame.mouse.get_pos()
