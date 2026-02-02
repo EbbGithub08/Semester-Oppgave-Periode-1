@@ -46,6 +46,7 @@ pygame.display.set_caption("Platformer")
 
 sun_img = pygame.image.load('img/sun.png')
 bg_img = pygame.image.load('img/sky.png')
+red_sky_img = pygame.image.load('img/red_sky.png')
 restart_img = pygame.image.load('img/restart_btn.png')
 back_img = pygame.transform.scale(pygame.image.load('img/back.png'), (50, 50))
 start_img = pygame.image.load('img/start_btn.png')
@@ -53,12 +54,18 @@ exit_img = pygame.image.load('img/exit_btn.png')
 world1_img = pygame.transform.scale(pygame.image.load('img/world1.png'), (200, 300))
 world2_img = pygame.transform.scale(pygame.image.load('img/world2.png'), (200, 300))
 world3_img = pygame.transform.scale(pygame.image.load('img/world3.png'), (200, 300))
+world5_img = pygame.transform.scale(pygame.image.load('img/World3_Demon.png'), (200, 300))
+demon_btn_img = pygame.transform.scale(pygame.image.load('img/Demon_Button.png'), (200, 100))
 tutorial_img = pygame.transform.scale(pygame.image.load('img/tutorial.png'), (300, 200))
 spike_sheet = pygame.image.load("img/spike.png").convert_alpha()
 death_skull = pygame.image.load('img/skull.png')
 
+red_overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+red_overlay.fill((255, 0, 0, 70))
+
 pygame.mixer.music.load('img/music.wav')
 pygame.mixer.music.play(-1, 0.0, 5000)
+
 coin_fx = pygame.mixer.Sound('img/coin.wav')
 coin_fx.set_volume(0.2) 
 jump_fx = pygame.mixer.Sound('img/jump.wav')
@@ -110,7 +117,7 @@ def debug_print_scores():
     c = conn.cursor()
     
     print("\n====== LEADERBOARDS ======")
-    for w in range(1, 5):
+    for w in range(1, 6):
         c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC", (w,))
         rows = c.fetchall()
         world_name = "TUTORIAL" if w == 4 else f"WORLD {w}"
@@ -123,19 +130,11 @@ def debug_print_scores():
     print("\n==========================")
     conn.close()
 
-def reset_scores():
-    conn = sqlite3.connect('platformer_scores.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM highscores")
-    conn.commit()
-    conn.close()
-    print("Database cleared!")
-
 def get_top_scores():
     conn = sqlite3.connect('platformer_scores.db')
     c = conn.cursor()
     scores = {}
-    for w in range(1, 5):
+    for w in range(1, 6):
         c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC LIMIT 3", (w,))
         rows = c.fetchall()
         scores[w] = rows
@@ -145,7 +144,6 @@ def get_top_scores():
 init_db()
 debug_print_scores()
 leaderboard_data = get_top_scores()
-
 
 
 def get_sprite(sheet, x, y, width, height):
@@ -177,6 +175,14 @@ def reset_level(level):
     elif selected_world == 3:
         if level == 2:
             x = screen_width // 2
+            y = 700
+        if level == 3:
+            x = 100
+            y = 100
+    elif selected_world == 5:
+        if level == 2:
+            x = screen_width // 2
+            y = 700
         if level == 3:
             x = 100
             y = 100
@@ -457,6 +463,7 @@ class Enemy(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
+        self.rect.inflate_ip(-(tile_size // 3), -0)
         self.move_direction = 1
         self.move_counter = 0
 
@@ -553,19 +560,25 @@ back_button_select = Button(10, -2, back_img)
 back_button_game = Button(80, -2, back_img)
 world2_button = Button(300, screen_height // 2 - 150, world2_img)
 world3_button = Button(550, screen_height // 2 - 150, world3_img)
+world5_button = Button(550, screen_height // 2 - 150, world5_img)
 tutorial_button = Button(screen_width // 2 - 159, 550, tutorial_img)
+demon_toggle_button = Button(screen_width // 2 - 110, screen_height - 125, demon_btn_img)
 death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
 user_text = ''
 
 
 
 run = True
+demon_mode = False
 while run == True:
     clock.tick(fps)
 
     screen.fill((0, 0, 0))
-    screen.blit(bg_img, (0, 0))
-    screen.blit(sun_img, (100, 100))
+    if (world_select and demon_mode) or (not main_menu and not world_select and selected_world == 5):
+        screen.blit(red_sky_img, (0, 0))
+    else:
+        screen.blit(bg_img, (0, 0))
+        screen.blit(sun_img, (100, 100))
 
     if main_menu == True:
         if start_button.draw():
@@ -582,7 +595,7 @@ while run == True:
         draw_text('TOP SCORES', font_score, blue, lb_x, lb_y)
         lb_y += 30
         
-        for w in range(1, 5):
+        for w in [1, 2, 3, 4]:
             world_name = "TUTORIAL" if w == 4 else f"WORLD {w}"
             draw_text(world_name, font_score, blue, lb_x, lb_y)
             lb_y += 25
@@ -594,9 +607,31 @@ while run == True:
                     draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, blue, lb_x, lb_y)
                     lb_y += 25
             lb_y += 10
+            
+        # Demon Leaderboard (Left Side)
+        lb_x = 50
+        lb_y = 20
+        draw_text('DEMON SCORES', font_score, red, lb_x, lb_y)
+        lb_y += 30
+        
+        for w in [5]:
+            world_name = "DEMON WORLD 3"
+            draw_text(world_name, font_score, red, lb_x, lb_y)
+            lb_y += 25
+            if not leaderboard_data[w]:
+                draw_text("No scores", font_score, red, lb_x, lb_y)
+                lb_y += 25
+            else:
+                for rank, row in enumerate(leaderboard_data[w], 1):
+                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, red, lb_x, lb_y)
+                    lb_y += 25
+            lb_y += 10
 
     elif world_select == True:
         draw_text('Select World', font, yellow, (screen_width // 2) - 200, screen_height // 2 - 250)
+        if demon_toggle_button.draw():
+            demon_mode = not demon_mode
+
         if back_button_select.draw():
             world_select = False
             main_menu = True
@@ -611,6 +646,8 @@ while run == True:
             score = 0
             death_counter = 0
             world = reset_level(level)
+            pygame.mixer.music.load('img/music.wav')
+            pygame.mixer.music.play(-1, 0.0, 5000)
         if world2_button.draw():
             selected_world = 2
             world_select = False
@@ -621,16 +658,36 @@ while run == True:
             score = 0
             death_counter = 0
             world = reset_level(level)
-        if world3_button.draw():
-            selected_world = 3
-            world_select = False
-            timer_running = True
-            start_time = time.time()
-            level = start_level
-            game_over = 0
-            score = 0
-            death_counter = 0
-            world = reset_level(level)
+            pygame.mixer.music.load('img/music.wav')
+            pygame.mixer.music.play(-1, 0.0, 5000)
+        
+        if not demon_mode:
+            if world3_button.draw():
+                selected_world = 3
+                world_select = False
+                timer_running = True
+                start_time = time.time()
+                level = start_level
+                game_over = 0
+                score = 0
+                death_counter = 0
+                world = reset_level(level)
+                pygame.mixer.music.load('img/music.wav')
+                pygame.mixer.music.play(-1, 0.0, 5000)
+        else:
+            if world5_button.draw():
+                selected_world = 5
+                world_select = False
+                timer_running = True
+                start_time = time.time()
+                level = start_level
+                game_over = 0
+                score = 0
+                death_counter = 0
+                world = reset_level(level)
+                pygame.mixer.music.load('img/Demon_Theme.mp3')
+                pygame.mixer.music.play(-1, 0.0, 5000)
+
         if tutorial_button.draw():
             selected_world = 4
             world_select = False
@@ -641,6 +698,8 @@ while run == True:
             score = 0
             death_counter = 0
             world = reset_level(level)
+            pygame.mixer.music.load('img/music.wav')
+            pygame.mixer.music.play(-1, 0.0, 5000)
 
     else:
         world.draw()
@@ -659,6 +718,8 @@ while run == True:
                 game_over = 0
                 score = 0
                 death_counter = 0
+                pygame.mixer.music.load('img/music.wav')
+                pygame.mixer.music.play(-1, 0.0, 5000)
 
         draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
         time_text = format_time(elapsed_time)
@@ -686,7 +747,8 @@ while run == True:
             if restart_button.draw() or (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400):
                 world = reset_level(level)
                 if level == 1:
-                    start_time = time.time()
+                    if not demon_mode:
+                        start_time = time.time()
                     timer_running = True
                 death_counter += 1
                 game_over = 0
@@ -728,15 +790,18 @@ while run == True:
                     score = 0
                     death_counter = 0
                     user_text = ''
-            if event.key == pygame.K_r:
-                    level = 1
-                    world = reset_level(level)
-                    game_over = 0
-                    score = 0
-                    death_counter = 0
-                    start_time = time.time()
-                    timer_running = True
-                    user_text = ''
+                    pygame.mixer.music.load('img/music.wav')
+                    pygame.mixer.music.play(-1, 0.0, 5000)
+            if game_over != 2:
+                if event.key == pygame.K_r:
+                        level = 1
+                        world = reset_level(level)
+                        game_over = 0
+                        score = 0
+                        death_counter = 0
+                        start_time = time.time()
+                        timer_running = True
+                        user_text = ''
                 
 
 
@@ -757,6 +822,9 @@ while run == True:
             else:
                 if len(user_text) < 15:
                     user_text += event.unicode
+
+    if (world_select and demon_mode) or (not main_menu and not world_select and selected_world == 5):
+        screen.blit(red_overlay, (0, 0))
 
     pygame.display.update()
 
