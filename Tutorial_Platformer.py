@@ -3,12 +3,15 @@ from pygame.locals import *
 from pygame import mixer
 import pickle
 from os import path
+import sqlite3
+import time
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 mixer.init()
 pygame.init()
 clock = pygame.time.Clock()
 fps = 60
+
 
 screen_width = 800
 screen_height = 800
@@ -20,7 +23,7 @@ tile_size = 40
 game_over = 0
 main_menu = True
 game_over_time = 0
-level = 3
+level = 1
 start_level = level
 max_levels = 10
 score = 0
@@ -30,7 +33,6 @@ world_select = False
 SPIKE_WIDTH = 16
 SPIKE_HEIGHT = 16
 
-
 font_score = pygame.font.SysFont('Bauhaus 93', 30)
 font = pygame.font.SysFont('Bauhaus 93', 90)
 white = (255, 255, 255)
@@ -39,14 +41,13 @@ blue = (0, 0, 255)
 yellow = (255, 255, 0)
 
 
-
-
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Platformer")
 
 sun_img = pygame.image.load('img/sun.png')
 bg_img = pygame.image.load('img/sky.png')
 restart_img = pygame.image.load('img/restart_btn.png')
+back_img = pygame.transform.scale(pygame.image.load('img/back.png'), (50, 50))
 start_img = pygame.image.load('img/start_btn.png')
 exit_img = pygame.image.load('img/exit_btn.png')
 world1_img = pygame.transform.scale(pygame.image.load('img/world1.png'), (200, 300))
@@ -55,9 +56,6 @@ world3_img = pygame.transform.scale(pygame.image.load('img/world3.png'), (200, 3
 tutorial_img = pygame.transform.scale(pygame.image.load('img/tutorial.png'), (300, 200))
 spike_sheet = pygame.image.load("img/spike.png").convert_alpha()
 death_skull = pygame.image.load('img/skull.png')
-
-
-
 
 pygame.mixer.music.load('img/music.wav')
 pygame.mixer.music.play(-1, 0.0, 5000)
@@ -69,6 +67,87 @@ game_over_fx = pygame.mixer.Sound('img/game_over.wav')
 game_over_fx.set_volume(0.2) 
 
 
+def init_db():
+    conn = sqlite3.connect('platformer_scores.db')
+    c = conn.cursor()
+
+    try:
+        c.execute("SELECT time_seconds FROM highscores LIMIT 1")
+    except sqlite3.OperationalError:
+        c.execute("DROP TABLE IF EXISTS highscores")
+        print("Gammel database oppdaget. Oppdaterer tabell...")
+
+    c.execute('''CREATE TABLE IF NOT EXISTS highscores
+                 (username TEXT, world INTEGER, time_seconds REAL)''')
+    c.execute("DELETE FROM highscores WHERE username = 'TEST'")
+    conn.commit()
+    conn.close()
+
+def save_highscore(username, world, time_seconds):
+    username = ''.join(char for char in username if char.isalpha()).upper()
+    if not username:
+        return
+    conn = sqlite3.connect('platformer_scores.db')
+    c = conn.cursor()
+    
+    c.execute("SELECT time_seconds FROM highscores WHERE username = ? AND world = ?", (username, world))
+    row = c.fetchone()
+
+    if row is None:
+        c.execute("INSERT INTO highscores VALUES (?, ?, ?)", (username, world, time_seconds))
+        print(f"Saved New Highscore -> Name: {username}, World: {world}, Time: {time_seconds:.2f} Sec")
+    elif time_seconds < row[0]:
+        c.execute("UPDATE highscores SET time_seconds = ? WHERE username = ? AND world = ?", (time_seconds, username, world))
+        print(f"Updated Highscore -> Name: {username}, World: {world}, Time: {time_seconds:.2f} Sec")
+    else:
+        print(f"Time not fast enough -> Name: {username}, World: {world}, Time: {time_seconds:.2f} Sec (Best: {row[0]:.2f})")
+
+    conn.commit()
+    conn.close()
+
+def debug_print_scores():
+    conn = sqlite3.connect('platformer_scores.db')
+    c = conn.cursor()
+    
+    print("\n====== LEADERBOARDS ======")
+    for w in range(1, 5):
+        c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC", (w,))
+        rows = c.fetchall()
+        world_name = "TUTORIAL" if w == 4 else f"WORLD {w}"
+        print(f"\n--- {world_name} ---")
+        if not rows:
+            print("No scores yet.")
+        else:
+            for rank, row in enumerate(rows, 1):
+                print(f"{rank}. {row[0]} - {row[2]:.2f}s")
+    print("\n==========================")
+    conn.close()
+
+def reset_scores():
+    conn = sqlite3.connect('platformer_scores.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM highscores")
+    conn.commit()
+    conn.close()
+    print("Database cleared!")
+
+def get_top_scores():
+    conn = sqlite3.connect('platformer_scores.db')
+    c = conn.cursor()
+    scores = {}
+    for w in range(1, 5):
+        c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC LIMIT 3", (w,))
+        rows = c.fetchall()
+        scores[w] = rows
+    conn.close()
+    return scores
+
+init_db()
+debug_print_scores()
+leaderboard_data = get_top_scores()
+
+
+
 def get_sprite(sheet, x, y, width, height):
     sprite = pygame.Surface((width, height), pygame.SRCALPHA)
     sprite.blit(sheet, (0, 0), (x, y, width, height))
@@ -78,20 +157,13 @@ def draw_text(text, font, text_col, x, y):
     img = font.render(str(text), True, text_col)
     screen.blit(img, (x, y))
 
-def format_time(ms):
-    seconds = ms // 1000
-    minutes = seconds // 60
-    seconds = seconds % 60
-    milliseconds = (ms % 1000) // 10
-    return f"{minutes:02}:{seconds:02}.{milliseconds:02}"
+def format_time(seconds):
+    return time.strftime("%M:%S", time.gmtime(seconds)) + f".{int((seconds % 1) * 100):02}"
 
 def reset_level(level):
-
-    # Default spawn location
     x = 80
     y = screen_height - 110
 
-    # Custom spawn locations
     if selected_world == 2:
         if level == 1:
             x = screen_width // 2
@@ -119,16 +191,12 @@ def reset_level(level):
     spike_group.empty()
     coin_group.add(score_coin)
 
-    # Determine file path based on selected world
     file_path = f'World_Data/World{selected_world}/level{level}_data'
-
-    print(f"Loading level from: {file_path}") # Debugging: Se hvilken fil den leter etter
 
     if path.exists(file_path):
         pickle_in = open(file_path, 'rb')
         world_data = pickle.load(pickle_in)
     else:
-        print(f"File not found: {file_path}. Loading empty world.") # Debugging: Filen mangler
         world_data = []
         for row in range(20):
             r = [0] * 20
@@ -142,7 +210,9 @@ def reset_level(level):
     return world
 
 
+
 class Button():
+    last_click_time = 0
     def __init__(self, x, y, image):
         self.image = image
         self.rect = self.image.get_rect()
@@ -156,29 +226,28 @@ class Button():
 
         if self.rect.collidepoint(pos):
             if pygame.mouse.get_pressed()[0] == 1 and self.clicked == False:
-                action = True
-                self.clicked = True
+                if pygame.time.get_ticks() - Button.last_click_time > 500:
+                    action = True
+                    self.clicked = True
+                    Button.last_click_time = pygame.time.get_ticks()
         
         if pygame.mouse.get_pressed()[0] == 0:
             self.clicked = False
-        key = pygame.key.get_pressed()
-        if key[pygame.K_SPACE] and (game_over == 0 or pygame.time.get_ticks() - game_over_time > 400):
-            action = True
 
         screen.blit(self.image, (self.rect.x, self.rect.y))
         return action
 
+
+
 class Player():
     def __init__(self, x, y):
         self.reset(x, y)
-
 
     def update(self, game_over):
         dx = 0
         dy = 0
         walk_cooldown = 5
         col_thresh = 20
-
 
         if game_over == 0:
             key = pygame.key.get_pressed()
@@ -230,7 +299,6 @@ class Player():
                 self.vel_y = 11
             dy += self.vel_y
 
-            #collison checks
             for tile in world.tile_list:
                 if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
                     dx = 0
@@ -315,14 +383,12 @@ class Player():
         self.on_ground = False
 
         
+
 class World():
     def __init__(self, data):
         self.tile_list = []
-
-
         dirt_img = pygame.image.load('img/dirt.png')
         grass_img = pygame.image.load('img/grass.png')
-
 
         row_count = 0
         for row in data:
@@ -374,7 +440,6 @@ class World():
                     spike = Spike(col_count * tile_size, row_count * tile_size, 3)
                     spike_group.add(spike)
 
-                    
                 col_count += 1
             row_count += 1 
 
@@ -382,6 +447,7 @@ class World():
         for tile in self.tile_list:
             screen.blit(tile[0], tile[1])
             #pygame.draw.rect(screen,(255, 0, 0), tile[1], 2)
+
 
 
 class Enemy(pygame.sprite.Sprite):
@@ -400,6 +466,7 @@ class Enemy(pygame.sprite.Sprite):
         if abs(self.move_counter) > 40:
             self.move_direction *= -1
             self.move_counter *= -1
+
 
 class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, move_x, move_y):
@@ -433,6 +500,7 @@ class Lava(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
 
+
 class Coin(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
@@ -450,6 +518,7 @@ class Exit(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
+
 
 class Spike(pygame.sprite.Sprite):
     def __init__(self, x, y, type):
@@ -476,27 +545,27 @@ coin_group.add(score_coin)
 
 world = reset_level(level)
 
-
 restart_button = Button(screen_width // 2 - 50, screen_height // 2 + 100, restart_img)
 start_button = Button(screen_width // 2 - 350, screen_height // 2 + 100, start_img)
 exit_button = Button(screen_width // 2 + 100, screen_height // 2 + 100, exit_img)
 world1_button = Button(50, screen_height // 2 - 150, world1_img)
+back_button_select = Button(10, -2, back_img)
+back_button_game = Button(80, -2, back_img)
 world2_button = Button(300, screen_height // 2 - 150, world2_img)
 world3_button = Button(550, screen_height // 2 - 150, world3_img)
 tutorial_button = Button(screen_width // 2 - 159, 550, tutorial_img)
 death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
+user_text = ''
+
+
 
 run = True
 while run == True:
-
-
-
     clock.tick(fps)
 
     screen.fill((0, 0, 0))
     screen.blit(bg_img, (0, 0))
     screen.blit(sun_img, (100, 100))
-
 
     if main_menu == True:
         if start_button.draw():
@@ -507,14 +576,36 @@ while run == True:
             world3_button.clicked = True
         if exit_button.draw():
             run = False
+        
+        lb_x = screen_width - 250
+        lb_y = 20
+        draw_text('TOP SCORES', font_score, blue, lb_x, lb_y)
+        lb_y += 30
+        
+        for w in range(1, 5):
+            world_name = "TUTORIAL" if w == 4 else f"WORLD {w}"
+            draw_text(world_name, font_score, blue, lb_x, lb_y)
+            lb_y += 25
+            if not leaderboard_data[w]:
+                draw_text("No scores", font_score, blue, lb_x, lb_y)
+                lb_y += 25
+            else:
+                for rank, row in enumerate(leaderboard_data[w], 1):
+                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, blue, lb_x, lb_y)
+                    lb_y += 25
+            lb_y += 10
 
     elif world_select == True:
         draw_text('Select World', font, yellow, (screen_width // 2) - 200, screen_height // 2 - 250)
+        if back_button_select.draw():
+            world_select = False
+            main_menu = True
+            leaderboard_data = get_top_scores()
         if world1_button.draw():
             selected_world = 1
             world_select = False
             timer_running = True
-            start_time = pygame.time.get_ticks()
+            start_time = time.time()
             level = start_level
             game_over = 0
             score = 0
@@ -524,7 +615,7 @@ while run == True:
             selected_world = 2
             world_select = False
             timer_running = True
-            start_time = pygame.time.get_ticks()
+            start_time = time.time()
             level = start_level
             game_over = 0
             score = 0
@@ -534,7 +625,7 @@ while run == True:
             selected_world = 3
             world_select = False
             timer_running = True
-            start_time = pygame.time.get_ticks()
+            start_time = time.time()
             level = start_level
             game_over = 0
             score = 0
@@ -544,7 +635,7 @@ while run == True:
             selected_world = 4
             world_select = False
             timer_running = True
-            start_time = pygame.time.get_ticks()
+            start_time = time.time()
             level = start_level
             game_over = 0
             score = 0
@@ -555,19 +646,25 @@ while run == True:
         world.draw()
         if game_over == 0:
             if timer_running:
-                elapsed_time = pygame.time.get_ticks() - start_time
+                elapsed_time = time.time() - start_time
             blob_group.update()
             platform_group.update()
             if pygame.sprite.spritecollide(player, coin_group, True):
                 score += 1
                 coin_fx.play()
 
+            if back_button_game.draw():
+                world_select = True
+                timer_running = False
+                game_over = 0
+                score = 0
+                death_counter = 0
+
         draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
         time_text = format_time(elapsed_time)
         draw_text(time_text, font_score, white, screen_width - 220, 12)
         draw_text(death_counter, font_score, red, screen_width - 50, 12)
         screen.blit(death_img, (screen_width - 90, 0))
-
 
         blob_group.draw(screen)
         platform_group.draw(screen)
@@ -577,8 +674,6 @@ while run == True:
             screen.blit(spike.image, (spike.rect.x - 10, spike.rect.y - 10))
         coin_group.draw(screen)
 
-
-
         if game_over == 0:
             game_over = player.update(game_over)
             if game_over == -1:
@@ -587,19 +682,18 @@ while run == True:
             game_over = player.update(game_over)
 
         if game_over == -1: 
-            if restart_button.draw():
+            key = pygame.key.get_pressed()
+            if restart_button.draw() or (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400):
                 world = reset_level(level)
                 if level == 1:
-                    start_time = pygame.time.get_ticks()
+                    start_time = time.time()
                     timer_running = True
                 death_counter += 1
                 game_over = 0
                 score = 0
 
-        
         if game_over == 1:
             level += 1
-            # Check for next level existence based on world
             next_level_path = f'World_Data/World{selected_world}/level{level}_data'
 
             if path.exists(next_level_path):
@@ -611,19 +705,58 @@ while run == True:
         
         if game_over == 2:
             timer_running = False
-            draw_text('You win!', font, blue, (screen_width // 2) - 115, screen_height // 2)
-            if restart_button.draw():
-                level = 1
-                world = reset_level(level)
-                game_over = 0
-                score = 0
-                death_counter = 0
-                start_time = pygame.time.get_ticks()
-                timer_running = True
+            draw_text('You win!', font, blue, (screen_width // 2) - 115, screen_height // 2 - 100)
+            draw_text('Enter Name: ' + user_text, font_score, white, (screen_width // 2) - 150, screen_height // 2)
+            draw_text('Press ENTER to save', font_score, white, (screen_width // 2) - 150, screen_height // 2 + 50)
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             run = False
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                if world_select:
+                    world_select = False
+                    main_menu = True
+                    leaderboard_data = get_top_scores()
+                elif main_menu:
+                    run = False
+                else:  # In-game (playing, dead, or won)
+                    world_select = True
+                    timer_running = False
+                    game_over = 0
+                    score = 0
+                    death_counter = 0
+                    user_text = ''
+            if event.key == pygame.K_r:
+                    level = 1
+                    world = reset_level(level)
+                    game_over = 0
+                    score = 0
+                    death_counter = 0
+                    start_time = time.time()
+                    timer_running = True
+                    user_text = ''
+                
+
+
+        if game_over == 2 and event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_BACKSPACE:
+                user_text = user_text[:-1]
+            elif event.key == pygame.K_RETURN:
+                if len(user_text) > 0:
+                    save_highscore(user_text, selected_world, elapsed_time)
+                    level = 1
+                    world = reset_level(level)
+                    game_over = 0
+                    score = 0
+                    death_counter = 0
+                    start_time = time.time()
+                    timer_running = True
+                    user_text = ''
+            else:
+                if len(user_text) < 15:
+                    user_text += event.unicode
 
     pygame.display.update()
 

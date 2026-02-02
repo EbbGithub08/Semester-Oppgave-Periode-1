@@ -2,8 +2,8 @@ import pygame, sys
 
 pygame.init()
 
-screen_width = 800
-screen_height = 600
+screen_width = 1600
+screen_height = 200
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("My First Pygame")
 
@@ -12,8 +12,6 @@ fotballmann = pygame.transform.scale(fotballmann,
                                      (fotballmann.get_width() // 2,
                                       fotballmann.get_height() // 2))
                                       
-                                     
-
 
 clock = pygame.time.Clock()
 
