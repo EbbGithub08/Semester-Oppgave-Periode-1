@@ -7,7 +7,7 @@ screen_height = 200
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("My First Pygame")
 
-fotballmann = pygame.image.load("fotbalman.png").convert_alpha()
+fotballmann = pygame.image.load("img/fotbalman.png").convert_alpha()
 fotballmann = pygame.transform.scale(fotballmann,
                                      (fotballmann.get_width() // 2,
                                       fotballmann.get_height() // 2))

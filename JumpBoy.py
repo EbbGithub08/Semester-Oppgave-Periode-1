@@ -78,7 +78,7 @@ game_over_fx.set_volume(0.2)
 
 
 def init_db():
-    conn = sqlite3.connect('platformer_scores.db')
+    conn = sqlite3.connect('Database/platformer_scores.db')
     c = conn.cursor()
 
     try:
@@ -97,7 +97,7 @@ def save_highscore(username, world, time_seconds):
     username = ''.join(char for char in username if char.isalpha()).upper()
     if not username:
         return
-    conn = sqlite3.connect('platformer_scores.db')
+    conn = sqlite3.connect('Database/platformer_scores.db')
     c = conn.cursor()
     
     c.execute("SELECT time_seconds FROM highscores WHERE username = ? AND world = ?", (username, world))
@@ -116,7 +116,7 @@ def save_highscore(username, world, time_seconds):
     conn.close()
 
 def debug_print_scores():
-    conn = sqlite3.connect('platformer_scores.db')
+    conn = sqlite3.connect('Database/platformer_scores.db')
     c = conn.cursor()
     
     print("\n====== LEADERBOARDS ======")
@@ -134,7 +134,7 @@ def debug_print_scores():
     conn.close()
 
 def get_top_scores():
-    conn = sqlite3.connect('platformer_scores.db')
+    conn = sqlite3.connect('Database/platformer_scores.db')
     c = conn.cursor()
     scores = {}
     for w in range(1, 6):
@@ -145,7 +145,7 @@ def get_top_scores():
     return scores
 
 def get_all_scores():
-    conn = sqlite3.connect('platformer_scores.db')
+    conn = sqlite3.connect('Database/platformer_scores.db')
     c = conn.cursor()
     scores = {}
     for w in range(1, 6):
@@ -239,6 +239,7 @@ class Button():
         self.rect.x = x
         self.rect.y = y
         self.clicked = False
+        self.mask = pygame.mask.from_surface(self.image)
         hover_width = int(self.rect.width * 1.05)
         hover_height = int(self.rect.height * 1.05)
         self.hover_image = pygame.transform.scale(self.image, (hover_width, hover_height))
@@ -246,7 +247,7 @@ class Button():
     def draw(self):
         action = False
         pos = pygame.mouse.get_pos()
-        if self.rect.collidepoint(pos):
+        if self.rect.collidepoint(pos) and self.mask.get_at((pos[0] - self.rect.x, pos[1] - self.rect.y)):
 
             hover_rect = self.hover_image.get_rect()
             hover_rect.center = self.rect.center
@@ -780,6 +781,13 @@ while run == True:
         draw_text(death_counter, font_score, red, screen_width - 50, 12)
         screen.blit(death_img, (screen_width - 90, 0))
 
+        if selected_world == 4:
+            tut_font = pygame.font.SysFont('Bauhaus 93', 30)
+            draw_text('Move: WASD/Arrows', tut_font, blue, 50, 50)
+            draw_text('Jump: Space/Up', tut_font, blue, 50, 80)
+            draw_text('R: Restart', tut_font, blue, 50, 110)
+            draw_text('ESC: Menu', tut_font, blue, 50, 140)
+
         blob_group.draw(screen)
         platform_group.draw(screen)
         lava_group.draw(screen)
@@ -797,7 +805,7 @@ while run == True:
 
         if game_over == -1: 
             key = pygame.key.get_pressed()
-            if restart_button.draw() or (key[pygame.K_SPACE] or key[pygame.K_RETURN] and pygame.time.get_ticks() - game_over_time > 400):
+            if restart_button.draw() or (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400) or (key[pygame.K_RETURN]):
                 world = reset_level(level)
                 if level == 1:
                     if not demon_mode:
