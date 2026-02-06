@@ -35,10 +35,12 @@ SPIKE_HEIGHT = 16
 
 font_score = pygame.font.SysFont('Bauhaus 93', 30)
 font = pygame.font.SysFont('Bauhaus 93', 90)
+font_leaderboard_entry = pygame.font.SysFont('Bauhaus 93', 24)
 white = (255, 255, 255)
 red = (255, 0, 0)
 blue = (0, 0, 255)
 yellow = (255, 255, 0)
+light_blue = (100, 149, 237)
 
 
 screen = pygame.display.set_mode((screen_width, screen_height))
@@ -59,6 +61,7 @@ demon_btn_img = pygame.transform.scale(pygame.image.load('img/Demon_Button.png')
 tutorial_img = pygame.transform.scale(pygame.image.load('img/tutorial.png'), (300, 200))
 spike_sheet = pygame.image.load("img/spike.png").convert_alpha()
 death_skull = pygame.image.load('img/skull.png')
+leaderboard_img = pygame.transform.scale(pygame.image.load('img/leaderboard.png'), (400, 200))
 
 red_overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
 red_overlay.fill((255, 0, 0, 70))
@@ -136,6 +139,17 @@ def get_top_scores():
     scores = {}
     for w in range(1, 6):
         c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC LIMIT 3", (w,))
+        rows = c.fetchall()
+        scores[w] = rows
+    conn.close()
+    return scores
+
+def get_all_scores():
+    conn = sqlite3.connect('platformer_scores.db')
+    c = conn.cursor()
+    scores = {}
+    for w in range(1, 6):
+        c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC", (w,))
         rows = c.fetchall()
         scores[w] = rows
     conn.close()
@@ -225,22 +239,30 @@ class Button():
         self.rect.x = x
         self.rect.y = y
         self.clicked = False
+        hover_width = int(self.rect.width * 1.05)
+        hover_height = int(self.rect.height * 1.05)
+        self.hover_image = pygame.transform.scale(self.image, (hover_width, hover_height))
     
     def draw(self):
         action = False
         pos = pygame.mouse.get_pos()
-
         if self.rect.collidepoint(pos):
+
+            hover_rect = self.hover_image.get_rect()
+            hover_rect.center = self.rect.center
+            screen.blit(self.hover_image, hover_rect)
+
             if pygame.mouse.get_pressed()[0] == 1 and self.clicked == False:
                 if pygame.time.get_ticks() - Button.last_click_time > 500:
                     action = True
                     self.clicked = True
                     Button.last_click_time = pygame.time.get_ticks()
+        else:
+            screen.blit(self.image, self.rect)
         
         if pygame.mouse.get_pressed()[0] == 0:
             self.clicked = False
 
-        screen.blit(self.image, (self.rect.x, self.rect.y))
         return action
 
 
@@ -563,12 +585,15 @@ world3_button = Button(550, screen_height // 2 - 150, world3_img)
 world5_button = Button(550, screen_height // 2 - 150, world5_img)
 tutorial_button = Button(screen_width // 2 - 159, 550, tutorial_img)
 demon_toggle_button = Button(screen_width // 2 - 110, screen_height - 125, demon_btn_img)
+leaderboard_button = Button(screen_width // 2 - 440, -30, leaderboard_img)
 death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
 user_text = ''
 
 
 
 run = True
+leaderboard_active = False
+full_leaderboard_data = {}
 demon_mode = False
 while run == True:
     clock.tick(fps)
@@ -580,7 +605,33 @@ while run == True:
         screen.blit(bg_img, (0, 0))
         screen.blit(sun_img, (100, 100))
 
-    if main_menu == True:
+    if leaderboard_active:
+        screen.fill((0, 50, 50))
+        draw_text('LEADERBOARD', font, light_blue, screen_width // 2 - 250, 50)
+        if back_button_select.draw():
+            leaderboard_active = False
+            main_menu = True
+        
+        col_width = screen_width // 4
+        for w in range(1, 5):
+            world_name = f"World {w}"
+            if w == 4: world_name = "Tutorial"
+            
+            x = (w - 1) * col_width + 20
+            y = 150
+            
+            color = white
+            
+            draw_text(world_name, font_score, color, x, y)
+            y += 20
+            
+            if w in full_leaderboard_data:
+                for i, row in enumerate(full_leaderboard_data[w][:15]):
+                    score_text = f"{i+1}. {row[0]} - {row[2]:.2f}s"
+                    draw_text(score_text, font_leaderboard_entry, color, x, y)
+                    y += 25
+
+    elif main_menu == True:
         if start_button.draw():
             main_menu = False
             world_select = True
@@ -589,6 +640,10 @@ while run == True:
             world3_button.clicked = True
         if exit_button.draw():
             run = False
+        if leaderboard_button.draw():
+            leaderboard_active = True
+            main_menu = False
+            full_leaderboard_data = get_all_scores()
         
         lb_x = screen_width - 250
         lb_y = 20
@@ -604,31 +659,13 @@ while run == True:
                 lb_y += 25
             else:
                 for rank, row in enumerate(leaderboard_data[w], 1):
-                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, blue, lb_x, lb_y)
-                    lb_y += 25
-            lb_y += 10
-            
-        # Demon Leaderboard (Left Side)
-        lb_x = 50
-        lb_y = 20
-        draw_text('DEMON SCORES', font_score, red, lb_x, lb_y)
-        lb_y += 30
-        
-        for w in [5]:
-            world_name = "DEMON WORLD 3"
-            draw_text(world_name, font_score, red, lb_x, lb_y)
-            lb_y += 25
-            if not leaderboard_data[w]:
-                draw_text("No scores", font_score, red, lb_x, lb_y)
-                lb_y += 25
-            else:
-                for rank, row in enumerate(leaderboard_data[w], 1):
-                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, red, lb_x, lb_y)
+                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, white, lb_x, lb_y)
                     lb_y += 25
             lb_y += 10
 
     elif world_select == True:
-        draw_text('Select World', font, yellow, (screen_width // 2) - 200, screen_height // 2 - 250)
+        if demon_mode != True:
+            draw_text('Select World', font, yellow, (screen_width // 2) - 200, screen_height // 2 - 250)
         if demon_toggle_button.draw():
             demon_mode = not demon_mode
 
@@ -636,32 +673,32 @@ while run == True:
             world_select = False
             main_menu = True
             leaderboard_data = get_top_scores()
-        if world1_button.draw():
-            selected_world = 1
-            world_select = False
-            timer_running = True
-            start_time = time.time()
-            level = start_level
-            game_over = 0
-            score = 0
-            death_counter = 0
-            world = reset_level(level)
-            pygame.mixer.music.load('img/music.wav')
-            pygame.mixer.music.play(-1, 0.0, 5000)
-        if world2_button.draw():
-            selected_world = 2
-            world_select = False
-            timer_running = True
-            start_time = time.time()
-            level = start_level
-            game_over = 0
-            score = 0
-            death_counter = 0
-            world = reset_level(level)
-            pygame.mixer.music.load('img/music.wav')
-            pygame.mixer.music.play(-1, 0.0, 5000)
         
         if not demon_mode:
+            if world1_button.draw():
+                selected_world = 1
+                world_select = False
+                timer_running = True
+                start_time = time.time()
+                level = start_level
+                game_over = 0
+                score = 0
+                death_counter = 0
+                world = reset_level(level)
+                pygame.mixer.music.load('img/music.wav')
+                pygame.mixer.music.play(-1, 0.0, 5000)
+            if world2_button.draw():
+                selected_world = 2
+                world_select = False
+                timer_running = True
+                start_time = time.time()
+                level = start_level
+                game_over = 0
+                score = 0
+                death_counter = 0
+                world = reset_level(level)
+                pygame.mixer.music.load('img/music.wav')
+                pygame.mixer.music.play(-1, 0.0, 5000)
             if world3_button.draw():
                 selected_world = 3
                 world_select = False
@@ -674,7 +711,35 @@ while run == True:
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
                 pygame.mixer.music.play(-1, 0.0, 5000)
+            if tutorial_button.draw():
+                selected_world = 4
+                world_select = False
+                timer_running = True
+                start_time = time.time()
+                level = start_level
+                game_over = 0
+                score = 0
+                death_counter = 0
+                world = reset_level(level)
+                pygame.mixer.music.load('img/music.wav')
+                pygame.mixer.music.play(-1, 0.0, 5000)
         else:
+            lb_x = 275
+            lb_y = 150
+            draw_text("DEMON WORLD - TOP SCORES", font_score, blue, lb_x, lb_y)
+            lb_y += 30
+            if not leaderboard_data[5]:
+                draw_text("No scores", font_score, white, lb_x, lb_y)
+                lb_y += 30
+            else:
+                for rank, row in enumerate(leaderboard_data[5], 1):
+                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, white, lb_x, lb_y)
+                    lb_y += 30
+            lb_y += 10
+
+
+            original_x = world5_button.rect.x
+            world5_button.rect.x = (screen_width // 2) - (world5_button.image.get_width() // 2)
             if world5_button.draw():
                 selected_world = 5
                 world_select = False
@@ -687,19 +752,7 @@ while run == True:
                 world = reset_level(level)
                 pygame.mixer.music.load('img/Demon_Theme.mp3')
                 pygame.mixer.music.play(-1, 0.0, 5000)
-
-        if tutorial_button.draw():
-            selected_world = 4
-            world_select = False
-            timer_running = True
-            start_time = time.time()
-            level = start_level
-            game_over = 0
-            score = 0
-            death_counter = 0
-            world = reset_level(level)
-            pygame.mixer.music.load('img/music.wav')
-            pygame.mixer.music.play(-1, 0.0, 5000)
+            world5_button.rect.x = original_x
 
     else:
         world.draw()
@@ -744,7 +797,7 @@ while run == True:
 
         if game_over == -1: 
             key = pygame.key.get_pressed()
-            if restart_button.draw() or (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400):
+            if restart_button.draw() or (key[pygame.K_SPACE] or key[pygame.K_RETURN] and pygame.time.get_ticks() - game_over_time > 400):
                 world = reset_level(level)
                 if level == 1:
                     if not demon_mode:
@@ -777,7 +830,10 @@ while run == True:
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                if world_select:
+                if leaderboard_active:
+                    leaderboard_active = False
+                    main_menu = True
+                elif world_select:
                     world_select = False
                     main_menu = True
                     leaderboard_data = get_top_scores()
