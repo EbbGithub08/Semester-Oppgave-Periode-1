@@ -6,6 +6,8 @@ from os import path
 import sqlite3
 import time
 
+from Classes import Player, Button, HighscoreDatabase, World, Coin
+
 pygame.mixer.pre_init(44100, -16, 2, 512)
 mixer.init()
 pygame.init()
@@ -77,93 +79,10 @@ game_over_fx = pygame.mixer.Sound('img/game_over.wav')
 game_over_fx.set_volume(0.2) 
 
 
-def init_db():
-    conn = sqlite3.connect('Database/platformer_scores.db')
-    c = conn.cursor()
-
-    try:
-        c.execute("SELECT time_seconds FROM highscores LIMIT 1")
-    except sqlite3.OperationalError:
-        c.execute("DROP TABLE IF EXISTS highscores")
-        print("Gammel database oppdaget. Oppdaterer tabell...")
-
-    c.execute('''CREATE TABLE IF NOT EXISTS highscores
-                 (username TEXT, world INTEGER, time_seconds REAL)''')
-    c.execute("DELETE FROM highscores WHERE username = 'TEST'")
-    conn.commit()
-    conn.close()
-
-def save_highscore(username, world, time_seconds):
-    username = ''.join(char for char in username if char.isalpha()).upper()
-    if not username:
-        return
-    conn = sqlite3.connect('Database/platformer_scores.db')
-    c = conn.cursor()
-    
-    c.execute("SELECT time_seconds FROM highscores WHERE username = ? AND world = ?", (username, world))
-    row = c.fetchone()
-
-    if row is None:
-        c.execute("INSERT INTO highscores VALUES (?, ?, ?)", (username, world, time_seconds))
-        print(f"Saved New Highscore -> Name: {username}, World: {world}, Time: {time_seconds:.2f} Sec")
-    elif time_seconds < row[0]:
-        c.execute("UPDATE highscores SET time_seconds = ? WHERE username = ? AND world = ?", (time_seconds, username, world))
-        print(f"Updated Highscore -> Name: {username}, World: {world}, Time: {time_seconds:.2f} Sec")
-    else:
-        print(f"Time not fast enough -> Name: {username}, World: {world}, Time: {time_seconds:.2f} Sec (Best: {row[0]:.2f})")
-
-    conn.commit()
-    conn.close()
-
-def debug_print_scores():
-    conn = sqlite3.connect('Database/platformer_scores.db')
-    c = conn.cursor()
-    
-    print("\n====== LEADERBOARDS ======")
-    for w in range(1, 6):
-        c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC", (w,))
-        rows = c.fetchall()
-        world_name = "TUTORIAL" if w == 4 else f"WORLD {w}"
-        print(f"\n--- {world_name} ---")
-        if not rows:
-            print("No scores yet.")
-        else:
-            for rank, row in enumerate(rows, 1):
-                print(f"{rank}. {row[0]} - {row[2]:.2f}s")
-    print("\n==========================")
-    conn.close()
-
-def get_top_scores():
-    conn = sqlite3.connect('Database/platformer_scores.db')
-    c = conn.cursor()
-    scores = {}
-    for w in range(1, 6):
-        c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC LIMIT 3", (w,))
-        rows = c.fetchall()
-        scores[w] = rows
-    conn.close()
-    return scores
-
-def get_all_scores():
-    conn = sqlite3.connect('Database/platformer_scores.db')
-    c = conn.cursor()
-    scores = {}
-    for w in range(1, 6):
-        c.execute("SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC", (w,))
-        rows = c.fetchall()
-        scores[w] = rows
-    conn.close()
-    return scores
-
-init_db()
-debug_print_scores()
-leaderboard_data = get_top_scores()
-
-
-def get_sprite(sheet, x, y, width, height):
-    sprite = pygame.Surface((width, height), pygame.SRCALPHA)
-    sprite.blit(sheet, (0, 0), (x, y, width, height))
-    return sprite
+db = HighscoreDatabase("Database/platformer_scores.db")
+db.init_db()
+db.debug_print_scores()
+leaderboard_data = db.get_top_scores()
 
 def draw_text(text, font, text_col, x, y):
     img = font.render(str(text), True, text_col)
@@ -226,339 +145,20 @@ def reset_level(level):
                 if row == 0 or row == 19 or col == 0 or col == 19:
                     world_data[row][col] = 1
 
-    world = World(world_data)
+    world = World(
+        world_data,
+        tile_size,
+        spike_sheet,
+        SPIKE_WIDTH,
+        SPIKE_HEIGHT,
+        blob_group,
+        platform_group,
+        lava_group,
+        coin_group,
+        exit_group,
+        spike_group,
+    )
     return world
-
-
-
-class Button():
-    last_click_time = 0
-    def __init__(self, x, y, image):
-        self.image = image
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.clicked = False
-        self.mask = pygame.mask.from_surface(self.image)
-        hover_width = int(self.rect.width * 1.05)
-        hover_height = int(self.rect.height * 1.05)
-        self.hover_image = pygame.transform.scale(self.image, (hover_width, hover_height))
-    
-    def draw(self):
-        action = False
-        pos = pygame.mouse.get_pos()
-        if self.rect.collidepoint(pos) and self.mask.get_at((pos[0] - self.rect.x, pos[1] - self.rect.y)):
-
-            hover_rect = self.hover_image.get_rect()
-            hover_rect.center = self.rect.center
-            screen.blit(self.hover_image, hover_rect)
-
-            if pygame.mouse.get_pressed()[0] == 1 and self.clicked == False:
-                if pygame.time.get_ticks() - Button.last_click_time > 500:
-                    action = True
-                    self.clicked = True
-                    Button.last_click_time = pygame.time.get_ticks()
-        else:
-            screen.blit(self.image, self.rect)
-        
-        if pygame.mouse.get_pressed()[0] == 0:
-            self.clicked = False
-
-        return action
-
-
-
-class Player():
-    def __init__(self, x, y):
-        self.reset(x, y)
-
-    def update(self, game_over):
-        dx = 0
-        dy = 0
-        walk_cooldown = 5
-        col_thresh = 20
-
-        if game_over == 0:
-            key = pygame.key.get_pressed()
-            if (key[pygame.K_SPACE] or key[pygame.K_w] or key[pygame.K_UP]) and self.on_ground:
-                jump_fx.play()
-                self.vel_y = -18
-                self.on_ground = False
-            if not (key[pygame.K_SPACE] or key[pygame.K_w] or key[pygame.K_UP]) and self.vel_y < -6:
-                self.vel_y = -6
-            if key[pygame.K_a] or key[pygame.K_LEFT]:
-                self.vel_x -= 1
-                self.counter += 1
-                self.direction = -1
-            if key[pygame.K_d] or key[pygame.K_RIGHT]:
-                self.vel_x += 1
-                self.counter += 1
-                self.direction = 1
-            if not (key[pygame.K_a] or key[pygame.K_LEFT]) and not (key[pygame.K_d] or key[pygame.K_RIGHT]):
-                if self.vel_x > 0:
-                    self.vel_x -= 2
-                    if self.vel_x < 0:
-                        self.vel_x = 0
-                elif self.vel_x < 0:
-                    self.vel_x += 2
-                    if self.vel_x > 0:
-                        self.vel_x = 0
-
-            if self.vel_x > 5:
-                self.vel_x = 5
-            if self.vel_x < -5:
-                self.vel_x = -5
-
-            dx += int(self.vel_x)
-
-            self.on_ground = False
-
-            if self.counter > walk_cooldown:
-                self.counter = 0
-                self.index += 1
-                if self.index >= len(self.images_right):
-                    self.index = 0
-                if self.direction == 1:
-                    self.image = self.images_right[self.index]
-                if self.direction == -1:
-                    self.image = self.images_left[self.index]
-
-            self.vel_y += 1
-            if self.vel_y > 11:
-                self.vel_y = 11
-            dy += self.vel_y
-
-            for tile in world.tile_list:
-                if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
-                    dx = 0
-                if tile[1].colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
-                    if self.vel_y < 0:
-                        dy = tile[1].bottom - self.rect.top
-                        self.vel_y = 0
-                    elif self.vel_y > 0:
-                        dy = tile[1].top - self.rect.bottom
-                        self.vel_y = 0
-                        self.on_ground = True
-
-            if pygame.sprite.spritecollide(self, blob_group, False):
-                game_over = -1
-                game_over_fx.play()
-
-
-            if pygame.sprite.spritecollide(self, lava_group, False):
-                game_over = -1
-                game_over_fx.play()
-
-            if pygame.sprite.spritecollide(self, spike_group, False):
-                game_over = -1
-                game_over_fx.play()
-
-            if pygame.sprite.spritecollide(self, exit_group, False):
-                game_over = 1
-
-            for platform in platform_group:
-                if platform.rect.colliderect(self.rect.x + dx, self.rect.y, self.width, self.height):
-                    dx = 0
-                if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
-                    if abs((self.rect.top) - platform.rect.bottom) < col_thresh:
-                       self.vel_y = 0
-                       dy = platform.rect.bottom - self.rect.top
-
-                    elif abs((self.rect.bottom + dy) - platform.rect.top) < col_thresh:
-                        self.rect.bottom = platform.rect.top -1
-                        dy = 0
-                        self.on_ground = True
-                        if platform.move_x != 0:
-                            self.rect.x += platform.move_direction
-                       
-            self.rect.x += dx
-            self.rect.y += dy
-
-        elif game_over == -1:
-            self.image = self.dead_image
-            draw_text('You Died!!!', font, red, (screen_width // 2) - 140, screen_height // 2)
-            self.rect.y -= 10
-
-
-
-        self.draw_rect.center = self.rect.center
-        screen.blit(self.image, self.draw_rect)
-        #pygame.draw.rect(screen, (255, 0, 0), self.rect, 2)
-
-        return game_over
-
-    def reset(self, x, y):
-        self.images_right = []
-        self.images_left = []
-        self.index = 0
-        self.counter = 0
-        for num in range(1, 5):
-            img_right = pygame.image.load(f'img/guy{num}.png')
-            img_right = pygame.transform.scale(img_right, (32, 64))
-            img_left = pygame.transform.flip(img_right, True, False)
-            self.images_right.append(img_right)
-            self.images_left.append(img_left)
-        self.dead_image = pygame.image.load('img/ghost.png')
-        self.image = self.images_right[self.index]
-        self.draw_rect = self.image.get_rect()
-        self.draw_rect.topleft = (x, y)
-        self.width = self.image.get_width() // 2
-        self.height = self.image.get_height()
-        self.rect = pygame.Rect(0, 0, self.width, self.height)
-        self.rect.center = self.draw_rect.center
-        self.vel_y = 0
-        self.vel_x = 0
-        self.direction = 0
-        self.on_ground = False
-
-        
-
-class World():
-    def __init__(self, data):
-        self.tile_list = []
-        dirt_img = pygame.image.load('img/dirt.png')
-        grass_img = pygame.image.load('img/grass.png')
-
-        row_count = 0
-        for row in data:
-            col_count = 0
-            for tile in row:
-                if tile == 1:
-                    img = pygame.transform.scale(dirt_img, (tile_size, tile_size))
-                    img_rect =img.get_rect()
-                    img_rect.x = col_count * tile_size
-                    img_rect.y = row_count * tile_size
-                    tile =(img, img_rect)
-                    self.tile_list.append(tile)
-                if tile == 2:
-                    img = pygame.transform.scale(grass_img, (tile_size, tile_size))
-                    img_rect =img.get_rect()
-                    img_rect.x = col_count * tile_size
-                    img_rect.y = row_count * tile_size
-                    tile =(img, img_rect)
-                    self.tile_list.append(tile)
-                if tile == 3:
-                    blob = Enemy(col_count * tile_size, row_count * tile_size + 8)
-                    blob_group.add(blob)
-                if tile == 4:
-                    platform = Platform(col_count * tile_size, row_count * tile_size, 1, 0)
-                    platform_group.add(platform)
-                if tile == 5:
-                    platform = Platform(col_count * tile_size, row_count * tile_size, 0, 1)
-                    platform_group.add(platform)
-                if tile == 6:
-                    lava = Lava(col_count * tile_size, row_count * tile_size + (tile_size // 2))
-                    lava_group.add(lava)
-                if tile == 7:
-                    coin = Coin(col_count * tile_size + (tile_size // 2), row_count * tile_size + (tile_size // 2))
-                    coin_group.add(coin)
-                if tile == 8:
-                    exit = Exit(col_count * tile_size, row_count * tile_size - (19))
-                    exit_group.add(exit)
-
-                if tile == 9:
-                    spike = Spike(col_count * tile_size, row_count * tile_size, 0)
-                    spike_group.add(spike)
-                if tile == 10:
-                    spike = Spike(col_count * tile_size, row_count * tile_size, 1)
-                    spike_group.add(spike)
-                if tile == 11:
-                    spike = Spike(col_count * tile_size, row_count * tile_size, 2)
-                    spike_group.add(spike)
-                if tile == 12:
-                    spike = Spike(col_count * tile_size, row_count * tile_size, 3)
-                    spike_group.add(spike)
-
-                col_count += 1
-            row_count += 1 
-
-    def draw(self):
-        for tile in self.tile_list:
-            screen.blit(tile[0], tile[1])
-            #pygame.draw.rect(screen,(255, 0, 0), tile[1], 2)
-
-
-
-class Enemy(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.image.load('img/blob.png')
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.rect.inflate_ip(-(tile_size // 3), -0)
-        self.move_direction = 1
-        self.move_counter = 0
-
-    def update(self):
-        self.rect.x += self.move_direction
-        self.move_counter += 1
-        if abs(self.move_counter) > 40:
-            self.move_direction *= -1
-            self.move_counter *= -1
-
-
-class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, move_x, move_y):
-        pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('img/platform.png')
-        self.image = pygame.transform.scale(img, (tile_size, tile_size // 2))
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.move_direction = 1
-        self.move_counter = 0
-        self.move_x = move_x
-        self.move_y = move_y
-
-
-    def update(self):
-        self.rect.x += self.move_direction * self.move_x
-        self.rect.y += self.move_direction * self.move_y
-        self.move_counter += 1
-        if abs(self.move_counter) > 40:
-            self.move_direction *= -1
-            self.move_counter *= -1
-
-
-class Lava(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('img/lava.png')
-        self.image = pygame.transform.scale(img, (tile_size, tile_size // 2))
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-
-
-class Coin(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('img/coin.png')
-        self.image = pygame.transform.scale(img, (tile_size // 2, tile_size // 2))
-        self.rect = self.image.get_rect()
-        self.rect.center = (x, y)
-
-
-class Exit(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        pygame.sprite.Sprite.__init__(self)
-        img = pygame.image.load('img/exit.png')
-        self.image = pygame.transform.scale(img, (tile_size, tile_size * 1.5))
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-
-
-class Spike(pygame.sprite.Sprite):
-    def __init__(self, x, y, type):
-        pygame.sprite.Sprite.__init__(self)
-        self.image = get_sprite(spike_sheet, type * SPIKE_WIDTH, 0, SPIKE_WIDTH, SPIKE_HEIGHT)
-        self.image = pygame.transform.scale(self.image, (tile_size, tile_size))
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.rect.inflate_ip(-(tile_size // 2), -(tile_size // 2))
 
 
 
@@ -570,7 +170,7 @@ coin_group = pygame.sprite.Group()
 exit_group = pygame.sprite.Group()
 spike_group = pygame.sprite.Group()
 
-score_coin = Coin(tile_size // 2, tile_size // 2)
+score_coin = Coin(tile_size // 2, tile_size // 2, tile_size)
 coin_group.add(score_coin)
 
 world = reset_level(level)
@@ -609,7 +209,7 @@ while run == True:
     if leaderboard_active:
         screen.fill((0, 50, 50))
         draw_text('LEADERBOARD', font, light_blue, screen_width // 2 - 250, 50)
-        if back_button_select.draw():
+        if back_button_select.draw(screen):
             leaderboard_active = False
             main_menu = True
         
@@ -633,18 +233,18 @@ while run == True:
                     y += 25
 
     elif main_menu == True:
-        if start_button.draw():
+        if start_button.draw(screen):
             main_menu = False
             world_select = True
             world1_button.clicked = True
             world2_button.clicked = True
             world3_button.clicked = True
-        if exit_button.draw():
+        if exit_button.draw(screen):
             run = False
-        if leaderboard_button.draw():
+        if leaderboard_button.draw(screen):
             leaderboard_active = True
             main_menu = False
-            full_leaderboard_data = get_all_scores()
+            full_leaderboard_data = db.get_all_scores()
         
         lb_x = screen_width - 250
         lb_y = 20
@@ -667,16 +267,16 @@ while run == True:
     elif world_select == True:
         if demon_mode != True:
             draw_text('Select World', font, yellow, (screen_width // 2) - 200, screen_height // 2 - 250)
-        if demon_toggle_button.draw():
+        if demon_toggle_button.draw(screen):
             demon_mode = not demon_mode
 
-        if back_button_select.draw():
+        if back_button_select.draw(screen):
             world_select = False
             main_menu = True
-            leaderboard_data = get_top_scores()
+            leaderboard_data = db.get_top_scores()
         
         if not demon_mode:
-            if world1_button.draw():
+            if world1_button.draw(screen):
                 selected_world = 1
                 world_select = False
                 timer_running = True
@@ -688,7 +288,7 @@ while run == True:
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
                 pygame.mixer.music.play(-1, 0.0, 5000)
-            if world2_button.draw():
+            if world2_button.draw(screen):
                 selected_world = 2
                 world_select = False
                 timer_running = True
@@ -700,7 +300,7 @@ while run == True:
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
                 pygame.mixer.music.play(-1, 0.0, 5000)
-            if world3_button.draw():
+            if world3_button.draw(screen):
                 selected_world = 3
                 world_select = False
                 timer_running = True
@@ -712,7 +312,7 @@ while run == True:
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
                 pygame.mixer.music.play(-1, 0.0, 5000)
-            if tutorial_button.draw():
+            if tutorial_button.draw(screen):
                 selected_world = 4
                 world_select = False
                 timer_running = True
@@ -741,7 +341,7 @@ while run == True:
 
             original_x = world5_button.rect.x
             world5_button.rect.x = (screen_width // 2) - (world5_button.image.get_width() // 2)
-            if world5_button.draw():
+            if world5_button.draw(screen):
                 selected_world = 5
                 world_select = False
                 timer_running = True
@@ -756,7 +356,7 @@ while run == True:
             world5_button.rect.x = original_x
 
     else:
-        world.draw()
+        world.draw(screen)
         if game_over == 0:
             if timer_running:
                 elapsed_time = time.time() - start_time
@@ -766,7 +366,7 @@ while run == True:
                 score += 1
                 coin_fx.play()
 
-            if back_button_game.draw():
+            if back_button_game.draw(screen):
                 world_select = True
                 timer_running = False
                 game_over = 0
@@ -797,15 +397,47 @@ while run == True:
         coin_group.draw(screen)
 
         if game_over == 0:
-            game_over = player.update(game_over)
+            game_over = player.update(
+                game_over,
+                world,
+                blob_group,
+                lava_group,
+                exit_group,
+                platform_group,
+                spike_group,
+                game_over_fx,
+                jump_fx,
+                draw_text,
+                font,
+                red,
+                screen,
+                screen_width,
+                screen_height,
+            )
             if game_over == -1:
                 game_over_time = pygame.time.get_ticks()
         else:
-            game_over = player.update(game_over)
+            game_over = player.update(
+                game_over,
+                world,
+                blob_group,
+                lava_group,
+                exit_group,
+                platform_group,
+                spike_group,
+                game_over_fx,
+                jump_fx,
+                draw_text,
+                font,
+                red,
+                screen,
+                screen_width,
+                screen_height,
+            )
 
         if game_over == -1: 
             key = pygame.key.get_pressed()
-            if restart_button.draw() or (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400) or (key[pygame.K_RETURN]):
+            if restart_button.draw(screen) or (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400) or (key[pygame.K_RETURN]):
                 world = reset_level(level)
                 if level == 1:
                     if not demon_mode:
@@ -844,7 +476,7 @@ while run == True:
                 elif world_select:
                     world_select = False
                     main_menu = True
-                    leaderboard_data = get_top_scores()
+                    leaderboard_data = db.get_top_scores()
                 elif main_menu:
                     run = False
                 else:  # In-game (playing, dead, or won)
@@ -874,7 +506,7 @@ while run == True:
                 user_text = user_text[:-1]
             elif event.key == pygame.K_RETURN:
                 if len(user_text) > 0:
-                    save_highscore(user_text, selected_world, elapsed_time)
+                    db.save_highscore(user_text, selected_world, elapsed_time)
                     level = 1
                     world = reset_level(level)
                     game_over = 0
