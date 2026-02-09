@@ -14,7 +14,6 @@ pygame.init()
 clock = pygame.time.Clock()
 fps = 60
 
-
 screen_width = 800
 screen_height = 800
 
@@ -39,6 +38,9 @@ font_score = pygame.font.SysFont('Bauhaus 93', 30)
 font = pygame.font.SysFont('Bauhaus 93', 90)
 font_leaderboard_entry = pygame.font.SysFont('Bauhaus 93', 24)
 white = (255, 255, 255)
+gray = (128, 128, 128)
+black = (0, 0, 0)
+green = (0, 100, 0)
 red = (255, 0, 0)
 blue = (0, 0, 255)
 yellow = (255, 255, 0)
@@ -63,7 +65,14 @@ demon_btn_img = pygame.transform.scale(pygame.image.load('img/Demon_Button.png')
 tutorial_img = pygame.transform.scale(pygame.image.load('img/tutorial.png'), (300, 200))
 spike_sheet = pygame.image.load("img/spike.png").convert_alpha()
 death_skull = pygame.image.load('img/skull.png')
-leaderboard_img = pygame.transform.scale(pygame.image.load('img/leaderboard.png'), (400, 200))
+leaderboard_img = pygame.transform.scale(pygame.image.load('img/leaderboard.png'), (400, 235))
+settings_img = pygame.transform.scale(pygame.image.load('img/settings.png'), (150, 100))
+trym_img = pygame.transform.scale(pygame.image.load('img/trym.png'), (230, 200))
+speech_original = pygame.image.load('img/speech.png').convert_alpha()
+desired_speech_height = 170
+speech_scale = desired_speech_height / speech_original.get_height()
+speech_width = int(speech_original.get_width() * speech_scale)
+speech_img = pygame.transform.smoothscale(speech_original, (speech_width, desired_speech_height))
 
 red_overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
 red_overlay.fill((255, 0, 0, 70))
@@ -84,9 +93,28 @@ db.init_db()
 db.debug_print_scores()
 leaderboard_data = db.get_top_scores()
 
-def draw_text(text, font, text_col, x, y):
-    img = font.render(str(text), True, text_col)
-    screen.blit(img, (x, y))
+def draw_text_no_aa(text, font, text_col, x, y):
+    surface = font.render(str(text), False, text_col)
+    screen.blit(surface, (x, y))
+
+def draw_text(text, font, text_col, x, y, outline_col=None, outline_thickness=1):
+    base_text = str(text)
+
+    if outline_col is None:
+        outline_col = black
+
+    text_surface = font.render(base_text, True, text_col)
+    outline_surface = font.render(base_text, True, outline_col)
+
+    if outline_thickness > 0:
+        for ox in range(-outline_thickness, outline_thickness + 1):
+            for oy in range(-outline_thickness, outline_thickness + 1):
+                if ox == 0 and oy == 0:
+                    continue
+                if ox * ox + oy * oy <= outline_thickness * outline_thickness:
+                    screen.blit(outline_surface, (x + ox, y + oy))
+
+    screen.blit(text_surface, (x, y))
 
 def format_time(seconds):
     return time.strftime("%M:%S", time.gmtime(seconds)) + f".{int((seconds % 1) * 100):02}"
@@ -186,10 +214,10 @@ world3_button = Button(550, screen_height // 2 - 150, world3_img)
 world5_button = Button(550, screen_height // 2 - 150, world5_img)
 tutorial_button = Button(screen_width // 2 - 159, 550, tutorial_img)
 demon_toggle_button = Button(screen_width // 2 - 110, screen_height - 125, demon_btn_img)
-leaderboard_button = Button(screen_width // 2 - 440, -30, leaderboard_img)
+leaderboard_button = Button(screen_width // 2 - 187, screen_height // 2 + 170, leaderboard_img)
 death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
+settings_button = Button(screen_width // 2 - 63, screen_height // 2 + 120, settings_img)
 user_text = ''
-
 
 
 run = True
@@ -207,7 +235,7 @@ while run == True:
         screen.blit(sun_img, (100, 100))
 
     if leaderboard_active:
-        screen.fill((0, 50, 50))
+        screen.fill((0, 50, 100))
         draw_text('LEADERBOARD', font, light_blue, screen_width // 2 - 250, 50)
         if back_button_select.draw(screen):
             leaderboard_active = False
@@ -224,13 +252,12 @@ while run == True:
             color = white
             
             draw_text(world_name, font_score, color, x, y)
-            y += 20
-            
+            y += 30
             if w in full_leaderboard_data:
                 for i, row in enumerate(full_leaderboard_data[w][:15]):
                     score_text = f"{i+1}. {row[0]} - {row[2]:.2f}s"
                     draw_text(score_text, font_leaderboard_entry, color, x, y)
-                    y += 25
+                    y += 30
 
     elif main_menu == True:
         if start_button.draw(screen):
@@ -245,6 +272,9 @@ while run == True:
             leaderboard_active = True
             main_menu = False
             full_leaderboard_data = db.get_all_scores()
+        if settings_button.draw(screen):
+            settings_active = True
+            main_menu = False
         
         lb_x = screen_width - 250
         lb_y = 20
@@ -273,6 +303,7 @@ while run == True:
         if back_button_select.draw(screen):
             world_select = False
             main_menu = True
+            demon_mode = False
             leaderboard_data = db.get_top_scores()
         
         if not demon_mode:
@@ -381,13 +412,41 @@ while run == True:
         draw_text(death_counter, font_score, red, screen_width - 50, 12)
         screen.blit(death_img, (screen_width - 90, 0))
 
-        if selected_world == 4:
-            tut_font = pygame.font.SysFont('Bauhaus 93', 30)
-            draw_text('Move: WASD/Arrows', tut_font, blue, 50, 50)
-            draw_text('Jump: Space/Up', tut_font, blue, 50, 80)
-            draw_text('R: Restart', tut_font, blue, 50, 110)
-            draw_text('ESC: Menu', tut_font, blue, 50, 140)
 
+        if selected_world == 4 and game_over != 2:
+            screen.blit(trym_img, (screen_width - 260, 50))
+
+            bubble_x = screen_width - 350
+            bubble_y = 30
+            screen.blit(speech_img, (bubble_x, bubble_y))
+
+            tut_font = pygame.font.SysFont('Bauhaus 93', 25)
+            lines = []
+
+            if level == 1:
+                lines = [
+                    "Move: WASD / Arrows",
+                    "Jump: Space / Up",
+                    "R: Restart  ESC: Menu",
+                ]
+            elif level == 2:
+                lines = [
+                    "Hold Space / Up to",
+                    "jump higher to reach",
+                    "higher platforms.",
+                ]
+            elif level == 3:
+                lines = [
+                    "Now its time to test",
+                    "your skill bitch!",
+                    "Huahuahuahuahuaa"
+                ]
+            text_x = bubble_x + 10
+            text_y = bubble_y + 32
+            line_spacing = 26
+            for line in lines:
+                draw_text_no_aa(line, tut_font, black, text_x, text_y)
+                text_y += line_spacing
         blob_group.draw(screen)
         platform_group.draw(screen)
         lava_group.draw(screen)
@@ -476,10 +535,11 @@ while run == True:
                 elif world_select:
                     world_select = False
                     main_menu = True
+                    demon_mode = False
                     leaderboard_data = db.get_top_scores()
                 elif main_menu:
                     run = False
-                else:  # In-game (playing, dead, or won)
+                else:
                     world_select = True
                     timer_running = False
                     game_over = 0
@@ -516,11 +576,12 @@ while run == True:
                     timer_running = True
                     user_text = ''
             else:
-                if len(user_text) < 15:
+                if len(user_text) < 9:
                     user_text += event.unicode
 
     if (world_select and demon_mode) or (not main_menu and not world_select and selected_world == 5):
         screen.blit(red_overlay, (0, 0))
+
 
     pygame.display.update()
 

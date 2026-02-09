@@ -27,11 +27,15 @@ class HighscoreDatabase:
             """
         )
 
+        c.execute("DELETE FROM highscores WHERE LENGTH(username) > 9")
+
         conn.commit()
         conn.close()
 
     def save_highscore(self, username: str, world: int, time_seconds: float) -> None:
         username = "".join(char for char in username if char.isalpha()).upper()
+        # Maks 10 tegn i databasen
+        username = username[:9]
         if not username:
             return
 
