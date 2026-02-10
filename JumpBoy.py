@@ -3,7 +3,6 @@ from pygame.locals import *
 from pygame import mixer
 import pickle
 from os import path
-import sqlite3
 import time
 
 from Classes import Player, Button, HighscoreDatabase, World, Coin
@@ -26,7 +25,6 @@ main_menu = True
 game_over_time = 0
 level = 1
 start_level = level
-max_levels = 10
 score = 0
 death_counter = 0
 selected_world = 0
@@ -45,7 +43,44 @@ red = (255, 0, 0)
 blue = (0, 0, 255)
 yellow = (255, 255, 0)
 light_blue = (100, 149, 237)
+orange = (255, 128, 0)
 
+class Slider:
+    def __init__(self, x, y, width, height, initial_val):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.val = initial_val
+        self.dragging = False
+        self.last_step = int(initial_val * 10)
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, gray, self.rect)
+        pygame.draw.rect(surface, black, self.rect, 2)
+        
+        knob_x = self.rect.x + (self.val * self.rect.width)
+        knob_rect = pygame.Rect(knob_x - 10, self.rect.y - 10, 20, self.rect.height + 20)
+        pygame.draw.rect(surface, white, knob_rect)
+        pygame.draw.rect(surface, black, knob_rect, 2)
+
+    def update(self):
+        pos = pygame.mouse.get_pos()
+        click = pygame.mouse.get_pressed()
+        
+        if click[0] == 0:
+            self.dragging = False
+        elif click[0] == 1 and self.rect.collidepoint(pos):
+            self.dragging = True
+            
+        if self.dragging:
+            rel_x = pos[0] - self.rect.x
+            self.val = rel_x / self.rect.width
+            self.val = max(0.0, min(1.0, self.val))
+            
+            current_step = int(self.val * 10)
+            if current_step != self.last_step:
+                plop_fx.play()
+                self.last_step = current_step
+        
+        return self.val
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Platformer")
@@ -57,6 +92,8 @@ restart_img = pygame.image.load('img/restart_btn.png')
 back_img = pygame.transform.scale(pygame.image.load('img/back.png'), (50, 50))
 start_img = pygame.image.load('img/start_btn.png')
 exit_img = pygame.image.load('img/exit_btn.png')
+resume_img = pygame.transform.scale(pygame.image.load('img/back.png'), (100, 100))
+exit_to_menu_img = pygame.transform.scale(pygame.image.load('img/exit_btn.png'), (150, 60))
 world1_img = pygame.transform.scale(pygame.image.load('img/world1.png'), (200, 300))
 world2_img = pygame.transform.scale(pygame.image.load('img/world2.png'), (200, 300))
 world3_img = pygame.transform.scale(pygame.image.load('img/world3.png'), (200, 300))
@@ -68,17 +105,14 @@ death_skull = pygame.image.load('img/skull.png')
 leaderboard_img = pygame.transform.scale(pygame.image.load('img/leaderboard.png'), (400, 235))
 settings_img = pygame.transform.scale(pygame.image.load('img/settings.png'), (150, 100))
 trym_img = pygame.transform.scale(pygame.image.load('img/trym.png'), (230, 200))
-speech_original = pygame.image.load('img/speech.png').convert_alpha()
-desired_speech_height = 170
-speech_scale = desired_speech_height / speech_original.get_height()
-speech_width = int(speech_original.get_width() * speech_scale)
-speech_img = pygame.transform.smoothscale(speech_original, (speech_width, desired_speech_height))
+speech_img = pygame.transform.scale(pygame.image.load('img/speech.png'), (250, 180))
+logo_img = pygame.transform.scale(pygame.image.load('img/logo.png'), (500, 500))
 
 red_overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
 red_overlay.fill((255, 0, 0, 70))
 
 pygame.mixer.music.load('img/music.wav')
-pygame.mixer.music.play(-1, 0.0, 5000)
+pygame.mixer.music.play(-1, 0.0,0)
 
 coin_fx = pygame.mixer.Sound('img/coin.wav')
 coin_fx.set_volume(0.2) 
@@ -86,16 +120,16 @@ jump_fx = pygame.mixer.Sound('img/jump.wav')
 jump_fx.set_volume(0.2) 
 game_over_fx = pygame.mixer.Sound('img/game_over.wav')
 game_over_fx.set_volume(0.2) 
+win_fx = pygame.mixer.Sound('img/win.wav')
+win_fx.set_volume(0.2)
+plop_fx = pygame.mixer.Sound('img/plop.wav')
+plop_fx.set_volume(0.2)
 
 
 db = HighscoreDatabase("Database/platformer_scores.db")
 db.init_db()
 db.debug_print_scores()
 leaderboard_data = db.get_top_scores()
-
-def draw_text_no_aa(text, font, text_col, x, y):
-    surface = font.render(str(text), False, text_col)
-    screen.blit(surface, (x, y))
 
 def draw_text(text, font, text_col, x, y, outline_col=None, outline_thickness=1):
     base_text = str(text)
@@ -104,9 +138,9 @@ def draw_text(text, font, text_col, x, y, outline_col=None, outline_thickness=1)
         outline_col = black
 
     text_surface = font.render(base_text, True, text_col)
-    outline_surface = font.render(base_text, True, outline_col)
 
     if outline_thickness > 0:
+        outline_surface = font.render(base_text, True, outline_col)
         for ox in range(-outline_thickness, outline_thickness + 1):
             for oy in range(-outline_thickness, outline_thickness + 1):
                 if ox == 0 and oy == 0:
@@ -217,11 +251,18 @@ demon_toggle_button = Button(screen_width // 2 - 110, screen_height - 125, demon
 leaderboard_button = Button(screen_width // 2 - 187, screen_height // 2 + 170, leaderboard_img)
 death_img = pygame.transform.scale(death_skull, (tile_size, tile_size))
 settings_button = Button(screen_width // 2 - 63, screen_height // 2 + 120, settings_img)
+resume_button = Button(250, 480, resume_img)
+exit_to_menu_button = Button(400, 500, exit_to_menu_img)
 user_text = ''
 
+music_volume = 0.3
+sfx_volume = 0.2
+music_slider = Slider(300, 340, 200, 20, music_volume)
+sfx_slider = Slider(300, 440, 200, 20, sfx_volume)
 
 run = True
 leaderboard_active = False
+settings_active = False
 full_leaderboard_data = {}
 demon_mode = False
 while run == True:
@@ -238,6 +279,7 @@ while run == True:
         screen.fill((0, 50, 100))
         draw_text('LEADERBOARD', font, light_blue, screen_width // 2 - 250, 50)
         if back_button_select.draw(screen):
+            plop_fx.play()
             leaderboard_active = False
             main_menu = True
         
@@ -254,53 +296,119 @@ while run == True:
             draw_text(world_name, font_score, color, x, y)
             y += 30
             if w in full_leaderboard_data:
-                for i, row in enumerate(full_leaderboard_data[w][:15]):
+                for i, row in enumerate(full_leaderboard_data[w]):
                     score_text = f"{i+1}. {row[0]} - {row[2]:.2f}s"
                     draw_text(score_text, font_leaderboard_entry, color, x, y)
                     y += 30
 
+    elif settings_active:
+        if not main_menu and not world_select:
+            world.draw(screen)
+            blob_group.draw(screen)
+            platform_group.draw(screen)
+            lava_group.draw(screen)
+            exit_group.draw(screen)
+            for spike in spike_group:
+                screen.blit(spike.image, (spike.rect.x - 10, spike.rect.y - 10))
+            coin_group.draw(screen)
+            
+            draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
+            time_text = format_time(elapsed_time)
+            draw_text(time_text, font_score, white, screen_width - 220, 12)
+            draw_text(death_counter, font_score, red, screen_width - 50, 12)
+            screen.blit(death_img, (screen_width - 90, 0))
+            screen.blit(player.image, player.rect)
+
+            if selected_world == 4 and game_over != 2:
+                screen.blit(trym_img, (screen_width - 200, 90))
+                bubble_x = screen_width - 400
+                bubble_y = 30
+                screen.blit(speech_img, (bubble_x, bubble_y))
+                
+                lines = []
+                if level == 1:
+                    lines = ["Move: WASD / Arrows", "Jump: Space / Up", "R: Restart  ESC: Menu"]
+                elif level == 2:
+                    lines = ["Hold Space / Up to", "jump higher to reach", "higher platforms."]
+                elif level == 3:
+                    lines = ["Now its time to test", "your skill bitch!", "Huahuahuahuahuaa"]
+                
+                text_x = bubble_x + 15
+                text_y = bubble_y + 32
+                line_spacing = 26
+                for line in lines:
+                    draw_text(line, font_score, black, text_x, text_y, outline_thickness=0)
+                    text_y += line_spacing
+
+        pygame.draw.rect(screen, orange, (200, 200, 400, 400))
+        pygame.draw.rect(screen, black, (200, 200, 400, 400), 5)
+
+        draw_text('SETTINGS', font, white, 245, 220)
+        
+        draw_text('Music Volume', font_score, white, 300, 300)
+        music_volume = music_slider.update()
+        music_slider.draw(screen)
+        pygame.mixer.music.set_volume(music_volume)
+        
+        draw_text('SFX Volume', font_score, white, 300, 400)
+        sfx_volume = sfx_slider.update()
+        sfx_slider.draw(screen)
+        coin_fx.set_volume(sfx_volume)
+        jump_fx.set_volume(sfx_volume)
+        game_over_fx.set_volume(sfx_volume)
+        win_fx.set_volume(sfx_volume)
+        plop_fx.set_volume(sfx_volume)
+        
+        is_in_game = not main_menu and not world_select
+        if is_in_game:
+            if resume_button.draw(screen):
+                plop_fx.play()
+                settings_active = False
+            if exit_to_menu_button.draw(screen):
+                plop_fx.play()
+                settings_active = False
+                world_select = True
+                timer_running = False
+                game_over = 0
+                score = 0
+                death_counter = 0
+                pygame.mixer.music.load('img/music.wav')
+                pygame.mixer.music.play(-1, 0.0, 5000)
+        else:
+            if back_button_select.draw(screen):
+                plop_fx.play()
+                settings_active = False
+
     elif main_menu == True:
+        screen.blit(logo_img, ((screen_width // 5), - 10))
         if start_button.draw(screen):
+            plop_fx.play()
             main_menu = False
             world_select = True
             world1_button.clicked = True
             world2_button.clicked = True
             world3_button.clicked = True
         if exit_button.draw(screen):
+            plop_fx.play()
             run = False
         if leaderboard_button.draw(screen):
+            plop_fx.play()
             leaderboard_active = True
             main_menu = False
             full_leaderboard_data = db.get_all_scores()
         if settings_button.draw(screen):
+            plop_fx.play()
             settings_active = True
-            main_menu = False
-        
-        lb_x = screen_width - 250
-        lb_y = 20
-        draw_text('TOP SCORES', font_score, blue, lb_x, lb_y)
-        lb_y += 30
-        
-        for w in [1, 2, 3, 4]:
-            world_name = "TUTORIAL" if w == 4 else f"WORLD {w}"
-            draw_text(world_name, font_score, blue, lb_x, lb_y)
-            lb_y += 25
-            if not leaderboard_data[w]:
-                draw_text("No scores", font_score, blue, lb_x, lb_y)
-                lb_y += 25
-            else:
-                for rank, row in enumerate(leaderboard_data[w], 1):
-                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, white, lb_x, lb_y)
-                    lb_y += 25
-            lb_y += 10
 
     elif world_select == True:
         if demon_mode != True:
             draw_text('Select World', font, yellow, (screen_width // 2) - 200, screen_height // 2 - 250)
         if demon_toggle_button.draw(screen):
+            plop_fx.play()
             demon_mode = not demon_mode
 
         if back_button_select.draw(screen):
+            plop_fx.play()
             world_select = False
             main_menu = True
             demon_mode = False
@@ -308,6 +416,7 @@ while run == True:
         
         if not demon_mode:
             if world1_button.draw(screen):
+                plop_fx.play()
                 selected_world = 1
                 world_select = False
                 timer_running = True
@@ -320,6 +429,7 @@ while run == True:
                 pygame.mixer.music.load('img/music.wav')
                 pygame.mixer.music.play(-1, 0.0, 5000)
             if world2_button.draw(screen):
+                plop_fx.play()
                 selected_world = 2
                 world_select = False
                 timer_running = True
@@ -332,6 +442,7 @@ while run == True:
                 pygame.mixer.music.load('img/music.wav')
                 pygame.mixer.music.play(-1, 0.0, 5000)
             if world3_button.draw(screen):
+                plop_fx.play()
                 selected_world = 3
                 world_select = False
                 timer_running = True
@@ -344,6 +455,7 @@ while run == True:
                 pygame.mixer.music.load('img/music.wav')
                 pygame.mixer.music.play(-1, 0.0, 5000)
             if tutorial_button.draw(screen):
+                plop_fx.play()
                 selected_world = 4
                 world_select = False
                 timer_running = True
@@ -373,6 +485,7 @@ while run == True:
             original_x = world5_button.rect.x
             world5_button.rect.x = (screen_width // 2) - (world5_button.image.get_width() // 2)
             if world5_button.draw(screen):
+                plop_fx.play()
                 selected_world = 5
                 world_select = False
                 timer_running = True
@@ -398,6 +511,7 @@ while run == True:
                 coin_fx.play()
 
             if back_button_game.draw(screen):
+                plop_fx.play()
                 world_select = True
                 timer_running = False
                 game_over = 0
@@ -414,13 +528,13 @@ while run == True:
 
 
         if selected_world == 4 and game_over != 2:
-            screen.blit(trym_img, (screen_width - 260, 50))
+            screen.blit(trym_img, (screen_width - 200, 90))
 
-            bubble_x = screen_width - 350
+            bubble_x = screen_width - 400
             bubble_y = 30
             screen.blit(speech_img, (bubble_x, bubble_y))
 
-            tut_font = pygame.font.SysFont('Bauhaus 93', 25)
+            tut_font = pygame.font.SysFont('Bauhaus 93', 30)
             lines = []
 
             if level == 1:
@@ -441,11 +555,11 @@ while run == True:
                     "your skill bitch!",
                     "Huahuahuahuahuaa"
                 ]
-            text_x = bubble_x + 10
+            text_x = bubble_x + 15
             text_y = bubble_y + 32
             line_spacing = 26
             for line in lines:
-                draw_text_no_aa(line, tut_font, black, text_x, text_y)
+                draw_text(line, tut_font, black, text_x, text_y, outline_thickness=0)
                 text_y += line_spacing
         blob_group.draw(screen)
         platform_group.draw(screen)
@@ -496,7 +610,14 @@ while run == True:
 
         if game_over == -1: 
             key = pygame.key.get_pressed()
-            if restart_button.draw(screen) or (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400) or (key[pygame.K_RETURN]):
+            reset_game = False
+            if restart_button.draw(screen):
+                plop_fx.play()
+                reset_game = True
+            elif (key[pygame.K_SPACE] and pygame.time.get_ticks() - game_over_time > 400) or (key[pygame.K_RETURN]):
+                reset_game = True
+            
+            if reset_game:
                 world = reset_level(level)
                 if level == 1:
                     if not demon_mode:
@@ -515,6 +636,7 @@ while run == True:
                 game_over = 0
             else:
                 game_over = 2
+                win_fx.play()
                 game_over_time = pygame.time.get_ticks()
         
         if game_over == 2:
@@ -532,6 +654,8 @@ while run == True:
                 if leaderboard_active:
                     leaderboard_active = False
                     main_menu = True
+                elif settings_active:
+                    settings_active = False
                 elif world_select:
                     world_select = False
                     main_menu = True
@@ -540,14 +664,7 @@ while run == True:
                 elif main_menu:
                     run = False
                 else:
-                    world_select = True
-                    timer_running = False
-                    game_over = 0
-                    score = 0
-                    death_counter = 0
-                    user_text = ''
-                    pygame.mixer.music.load('img/music.wav')
-                    pygame.mixer.music.play(-1, 0.0, 5000)
+                    settings_active = True
             if game_over != 2:
                 if event.key == pygame.K_r:
                         level = 1
