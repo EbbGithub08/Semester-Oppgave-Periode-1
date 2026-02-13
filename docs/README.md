@@ -52,9 +52,9 @@ python main.py
 ```
 
 ## Bilder
-![Preview 1](/preview1.png)
-![Preview 2](preview2.png)
-![Preview 3](preview3.png)
+![Preview 1](img/preview1.png)
+![Preview 2](img/preview2.png)
+![Preview 3](img/preview3.png)
 
 <img src="img/preview1.png" alt="Preview 1">
 
