@@ -12,12 +12,9 @@ class Enemy(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.image.load("img/blob.png")
 
-        # The draw_rect is for positioning the sprite image.
         self.draw_rect = self.image.get_rect()
         self.draw_rect.topleft = (x, y)
 
-        # self.rect is the hitbox for collisions.
-        # Make it smaller and place it at the bottom-center of the sprite.
         self.rect = pygame.Rect(0, 0, self.draw_rect.width * 0.7, self.draw_rect.height * 0.6)
         self.rect.midbottom = self.draw_rect.midbottom
 
@@ -31,7 +28,6 @@ class Enemy(pygame.sprite.Sprite):
             self.move_direction *= -1
             self.move_counter *= -1
         
-        # Keep the visual sprite aligned with the hitbox
         self.draw_rect.midbottom = self.rect.midbottom
 
 class Platform(pygame.sprite.Sprite):

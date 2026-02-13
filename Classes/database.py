@@ -4,20 +4,16 @@ from typing import Dict, List, Tuple
 
 class HighscoreDatabase:
 
-    # Initialiserer database-sti.
     def __init__(self, db_path: str = "Database/platformer_scores.db"):
         self.db_path = db_path
 
-    # Oppretter databaseforbindelse.
     def _get_connection(self):
         return sqlite3.connect(self.db_path)
 
-    # Initialiserer databasen.
     def init_db(self) -> None:
         with self._get_connection() as conn:
             c = conn.cursor()
 
-            # Opprett tabell hvis den ikke finnes
             c.execute(
                 """
                 CREATE TABLE IF NOT EXISTS highscores (
@@ -31,7 +27,6 @@ class HighscoreDatabase:
                 """
             )
 
-            # Sjekk og legg til manglende kolonner for eldre databaser
             c.execute("PRAGMA table_info(highscores)")
             columns = [info[1] for info in c.fetchall()]
             if 'coins' not in columns:
@@ -41,10 +36,8 @@ class HighscoreDatabase:
             if 'score_version' not in columns:
                 c.execute("ALTER TABLE highscores ADD COLUMN score_version INTEGER DEFAULT 0")
 
-            # Valgfri opprydding fra originalkoden
             c.execute("DELETE FROM highscores WHERE LENGTH(username) > 9")
 
-    # Lagrer eller oppdaterer highscore.
     def save_highscore(self, username: str, world: int, time_seconds: float, coins: int, perfect_run: bool) -> None:
         username = "".join(char for char in username if char.isalpha()).upper()[:9]
         if not username:
@@ -75,7 +68,6 @@ class HighscoreDatabase:
             else:
                 print(f"Tiden var ikke rask nok for {username}: {time_seconds:.2f}s (Best: {row[0]:.2f}s, Perfect: {perfect_run})")
 
-    # Skriver ut for feilsøking.
     def debug_print_scores(self) -> None:
         print("\n====== LEADERBOARDS (DEBUG) ======")
         with self._get_connection() as conn:
@@ -93,7 +85,6 @@ class HighscoreDatabase:
                     print("Ingen scores enda.")
                 else:
                     for rank, row in enumerate(rows, 1):
-                        # Håndter utpakking dynamisk i tilfelle flere kolonner
                         username = row[0]
                         time_s = row[2]
                         coins = row[3] if len(row) > 3 else 0
@@ -102,7 +93,6 @@ class HighscoreDatabase:
                         print(f"{rank}. {username} - {time_s:.2f}s - Coins: {coins}{perfect_str}")
         print("\n================================")
 
-    # Henter scores per verden.
     def _get_scores_by_world(self, limit_per_world: int = None) -> Dict[int, List[Tuple]]:
         scores: Dict[int, List[Tuple]] = {}
         query = "SELECT * FROM highscores WHERE world = ? ORDER BY time_seconds ASC"
@@ -111,15 +101,13 @@ class HighscoreDatabase:
 
         with self._get_connection() as conn:
             c = conn.cursor()
-            for w in range(1, 6):  # Verden 1 til 5
+            for w in range(1, 6):
                 c.execute(query, (w,))
                 scores[w] = c.fetchall()
         return scores
 
-    # Henter topp 3 scores.
     def get_top_scores(self) -> Dict[int, List[Tuple]]:
         return self._get_scores_by_world(limit_per_world=3)
 
-    # Henter alle scores.
     def get_all_scores(self) -> Dict[int, List[Tuple]]:
         return self._get_scores_by_world()

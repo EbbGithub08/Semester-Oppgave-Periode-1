@@ -2,11 +2,6 @@ import pygame
 
 
 class Button:
-    """
-    Simple clickable button.
-
-    `draw(screen)` returns True exactly once per valid click.
-    """
 
     last_click_time = 0
 
@@ -25,9 +20,6 @@ class Button:
         )
 
     def draw(self, screen):
-        """
-        Draw the button on `screen` and detect clicks.
-        """
         action = False
         pos = pygame.mouse.get_pos()
 

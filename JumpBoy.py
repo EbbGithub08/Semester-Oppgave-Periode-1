@@ -237,7 +237,7 @@ def get_total_coins(world_num):
         
         for row in world_data:
             for tile in row:
-                if tile == 7: # 7 is the ID for Coin
+                if tile == 7:
                     total += 1
         lvl += 1
     return total

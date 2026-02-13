@@ -45,6 +45,12 @@ Flere verdener, timer, deaths, leaderboard og en ekstra **Demon World**.
 
 ---
 
+## Tools
+- level_editor.py
+- Ikke laget selv men brukt for å lage nivåene
+  
+---
+
 ## Hvordan kjøre
 ```bash
 pip install pygame
