@@ -49,3 +49,15 @@ Flere verdener, timer, deaths, leaderboard og en ekstra **Demon World**.
 ```bash
 pip install pygame
 python main.py
+```
+
+## Bilder
+![Preview 1](/preview1.png)
+![Preview 2](preview2.png)
+![Preview 3](preview3.png)
+
+<img src="img/preview1.png" alt="Preview 1">
+
+## Kildeliste
+- [Coding With Russ - Platformer Tutorial](https://www.youtube.com/watch?v=Ongc4EVqRjo&list=PLjcN1EyupaQnHM1I9SmiXfbT6aG4ezUvu&index=1)
+- Småbruk av KI

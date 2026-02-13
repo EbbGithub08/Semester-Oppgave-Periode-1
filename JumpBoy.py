@@ -26,6 +26,7 @@ game_over_time = 0
 level = 1
 start_level = level
 score = 0
+score_at_level_start = 0
 death_counter = 0
 selected_world = 0
 world_select = False
@@ -44,6 +45,7 @@ blue = (0, 0, 255)
 yellow = (255, 255, 0)
 light_blue = (100, 149, 237)
 orange = (255, 128, 0)
+gold = (255, 215, 0)
 
 class Slider:
     def __init__(self, x, y, width, height, initial_val):
@@ -190,7 +192,6 @@ def reset_level(level):
     platform_group.empty()
     coin_group.empty()
     spike_group.empty()
-    coin_group.add(score_coin)
 
     file_path = f'World_Data/World{selected_world}/level{level}_data'
 
@@ -222,6 +223,24 @@ def reset_level(level):
     )
     return world
 
+def get_total_coins(world_num):
+    total = 0
+    lvl = 1
+    while True:
+        file_path = f'World_Data/World{world_num}/level{lvl}_data'
+        if not path.exists(file_path):
+            break
+        
+        pickle_in = open(file_path, 'rb')
+        world_data = pickle.load(pickle_in)
+        pickle_in.close()
+        
+        for row in world_data:
+            for tile in row:
+                if tile == 7: # 7 is the ID for Coin
+                    total += 1
+        lvl += 1
+    return total
 
 
 player = Player(80, screen_height - 110)
@@ -233,7 +252,6 @@ exit_group = pygame.sprite.Group()
 spike_group = pygame.sprite.Group()
 
 score_coin = Coin(tile_size // 2, tile_size // 2, tile_size)
-coin_group.add(score_coin)
 
 world = reset_level(level)
 
@@ -283,34 +301,43 @@ while run == True:
             leaderboard_active = False
             main_menu = True
         
-        col_width = screen_width // 4
-        for w in range(1, 5):
-            world_name = f"World {w}"
-            if w == 4: world_name = "Tutorial"
+        leaderboard_worlds = {
+            1: {"name": "World 1", "pos": (20, 150)},
+            2: {"name": "World 2", "pos": (220, 150)},
+            3: {"name": "World 3", "pos": (420, 150)},
+            4: {"name": "Tutorial", "pos": (620, 150)},
+        }
+
+        for w, data in leaderboard_worlds.items():
+            x, y_start = data["pos"]
+            name = data["name"]
             
-            x = (w - 1) * col_width + 20
-            y = 150
+            draw_text(name, font_score, white, x, y_start)
+            y = y_start + 40
             
-            color = white
-            
-            draw_text(world_name, font_score, color, x, y)
-            y += 30
-            if w in full_leaderboard_data:
-                for i, row in enumerate(full_leaderboard_data[w]):
+            scores = full_leaderboard_data.get(w, [])
+            if not scores:
+                draw_text("No scores yet", font_leaderboard_entry, gray, x, y)
+            else:
+                for i, row in enumerate(scores[:15]):
+                    is_perfect = len(row) > 4 and row[4] == 1
+                    entry_color = gold if is_perfect else white
                     score_text = f"{i+1}. {row[0]} - {row[2]:.2f}s"
-                    draw_text(score_text, font_leaderboard_entry, color, x, y)
+                    draw_text(score_text, font_leaderboard_entry, entry_color, x, y)
                     y += 30
 
     elif settings_active:
         if not main_menu and not world_select:
             world.draw(screen)
-            blob_group.draw(screen)
+            for enemy in blob_group:
+                screen.blit(enemy.image, enemy.draw_rect)
             platform_group.draw(screen)
             lava_group.draw(screen)
             exit_group.draw(screen)
             for spike in spike_group:
                 screen.blit(spike.image, (spike.rect.x - 10, spike.rect.y - 10))
             coin_group.draw(screen)
+            screen.blit(score_coin.image, score_coin.rect)
             
             draw_text('X ' + str(score), font_score, white, tile_size - 3, 12)
             time_text = format_time(elapsed_time)
@@ -424,6 +451,7 @@ while run == True:
                 level = start_level
                 game_over = 0
                 score = 0
+                score_at_level_start = 0
                 death_counter = 0
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
@@ -437,6 +465,7 @@ while run == True:
                 level = start_level
                 game_over = 0
                 score = 0
+                score_at_level_start = 0
                 death_counter = 0
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
@@ -450,6 +479,7 @@ while run == True:
                 level = start_level
                 game_over = 0
                 score = 0
+                score_at_level_start = 0
                 death_counter = 0
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
@@ -463,6 +493,7 @@ while run == True:
                 level = start_level
                 game_over = 0
                 score = 0
+                score_at_level_start = 0
                 death_counter = 0
                 world = reset_level(level)
                 pygame.mixer.music.load('img/music.wav')
@@ -477,7 +508,10 @@ while run == True:
                 lb_y += 30
             else:
                 for rank, row in enumerate(leaderboard_data[5], 1):
-                    draw_text(f"{rank}. {row[0]} - {row[2]:.2f}s", font_score, white, lb_x, lb_y)
+                    is_perfect = len(row) > 4 and row[4] == 1
+                    entry_color = gold if is_perfect else white
+                    score_text = f"{rank}. {row[0]} - {row[2]:.2f}s"
+                    draw_text(score_text, font_score, entry_color, lb_x, lb_y)
                     lb_y += 30
             lb_y += 10
 
@@ -493,6 +527,7 @@ while run == True:
                 level = start_level
                 game_over = 0
                 score = 0
+                score_at_level_start = 0
                 death_counter = 0
                 world = reset_level(level)
                 pygame.mixer.music.load('img/Demon_Theme.mp3')
@@ -506,7 +541,8 @@ while run == True:
                 elapsed_time = time.time() - start_time
             blob_group.update()
             platform_group.update()
-            if pygame.sprite.spritecollide(player, coin_group, True):
+            collided_coins = pygame.sprite.spritecollide(player, coin_group, True)
+            for _ in collided_coins:
                 score += 1
                 coin_fx.play()
 
@@ -561,13 +597,15 @@ while run == True:
             for line in lines:
                 draw_text(line, tut_font, black, text_x, text_y, outline_thickness=0)
                 text_y += line_spacing
-        blob_group.draw(screen)
+        for enemy in blob_group:
+            screen.blit(enemy.image, enemy.draw_rect)
         platform_group.draw(screen)
         lava_group.draw(screen)
         exit_group.draw(screen)
         for spike in spike_group:
             screen.blit(spike.image, (spike.rect.x - 10, spike.rect.y - 10))
         coin_group.draw(screen)
+        screen.blit(score_coin.image, score_coin.rect)
 
         if game_over == 0:
             game_over = player.update(
@@ -625,9 +663,10 @@ while run == True:
                     timer_running = True
                 death_counter += 1
                 game_over = 0
-                score = 0
+                score = score_at_level_start
 
         if game_over == 1:
+            score_at_level_start = score
             level += 1
             next_level_path = f'World_Data/World{selected_world}/level{level}_data'
 
@@ -671,6 +710,7 @@ while run == True:
                         world = reset_level(level)
                         game_over = 0
                         score = 0
+                        score_at_level_start = 0
                         death_counter = 0
                         start_time = time.time()
                         timer_running = True
@@ -683,11 +723,16 @@ while run == True:
                 user_text = user_text[:-1]
             elif event.key == pygame.K_RETURN:
                 if len(user_text) > 0:
-                    db.save_highscore(user_text, selected_world, elapsed_time)
+                    total_possible_coins = get_total_coins(selected_world)
+                    print(f"DEBUG: Score: {score} / Total Possible: {total_possible_coins}")
+                    is_perfect_run = (score >= total_possible_coins) and (total_possible_coins > 0) and (death_counter == 0)
+                    
+                    db.save_highscore(user_text, selected_world, elapsed_time, score, is_perfect_run)
                     level = 1
                     world = reset_level(level)
                     game_over = 0
                     score = 0
+                    score_at_level_start = 0
                     death_counter = 0
                     start_time = time.time()
                     timer_running = True

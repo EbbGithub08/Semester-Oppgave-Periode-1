@@ -11,10 +11,16 @@ class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y, tile_size):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.image.load("img/blob.png")
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-        self.rect.inflate_ip(-(tile_size // 3), -0)
+
+        # The draw_rect is for positioning the sprite image.
+        self.draw_rect = self.image.get_rect()
+        self.draw_rect.topleft = (x, y)
+
+        # self.rect is the hitbox for collisions.
+        # Make it smaller and place it at the bottom-center of the sprite.
+        self.rect = pygame.Rect(0, 0, self.draw_rect.width * 0.7, self.draw_rect.height * 0.6)
+        self.rect.midbottom = self.draw_rect.midbottom
+
         self.move_direction = 1
         self.move_counter = 0
 
@@ -24,7 +30,9 @@ class Enemy(pygame.sprite.Sprite):
         if abs(self.move_counter) > 40:
             self.move_direction *= -1
             self.move_counter *= -1
-
+        
+        # Keep the visual sprite aligned with the hitbox
+        self.draw_rect.midbottom = self.rect.midbottom
 
 class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, move_x, move_y, tile_size):
@@ -92,4 +100,3 @@ class Spike(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
         self.rect.inflate_ip(-(tile_size // 2), -(tile_size // 2))
-
