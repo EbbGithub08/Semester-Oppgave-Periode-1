@@ -51,13 +51,12 @@ pip install pygame
 python main.py
 ```
 
-## Bilder
-![Preview 1](img/preview1.png)
-![Preview 2](img/preview2.png)
-![Preview 3](img/preview3.png)
-
-<img src="img/preview1.png" alt="Preview 1">
-
 ## Kildeliste
 - [Coding With Russ - Platformer Tutorial](https://www.youtube.com/watch?v=Ongc4EVqRjo&list=PLjcN1EyupaQnHM1I9SmiXfbT6aG4ezUvu&index=1)
 - Småbruk av KI
+
+## Bilder
+![Preview 1](../img/preview1.png)
+![Preview 2](../img/preview2.png)
+![Preview 3](../img/preview3.png)
+
