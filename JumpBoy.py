@@ -5,7 +5,7 @@ import pickle
 from os import path
 import time
 
-from Classes import Player, Button, HighscoreDatabase, World, Coin
+from Classes import Player, Button, HighscoreDatabase, World, Coin, Slider
 
 pygame.mixer.pre_init(44100, -16, 2, 512)
 mixer.init()
@@ -47,42 +47,6 @@ light_blue = (100, 149, 237)
 orange = (255, 128, 0)
 gold = (255, 215, 0)
 
-class Slider:
-    def __init__(self, x, y, width, height, initial_val):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.val = initial_val
-        self.dragging = False
-        self.last_step = int(initial_val * 10)
-
-    def draw(self, surface):
-        pygame.draw.rect(surface, gray, self.rect)
-        pygame.draw.rect(surface, black, self.rect, 2)
-        
-        knob_x = self.rect.x + (self.val * self.rect.width)
-        knob_rect = pygame.Rect(knob_x - 10, self.rect.y - 10, 20, self.rect.height + 20)
-        pygame.draw.rect(surface, white, knob_rect)
-        pygame.draw.rect(surface, black, knob_rect, 2)
-
-    def update(self):
-        pos = pygame.mouse.get_pos()
-        click = pygame.mouse.get_pressed()
-        
-        if click[0] == 0:
-            self.dragging = False
-        elif click[0] == 1 and self.rect.collidepoint(pos):
-            self.dragging = True
-            
-        if self.dragging:
-            rel_x = pos[0] - self.rect.x
-            self.val = rel_x / self.rect.width
-            self.val = max(0.0, min(1.0, self.val))
-            
-            current_step = int(self.val * 10)
-            if current_step != self.last_step:
-                plop_fx.play()
-                self.last_step = current_step
-        
-        return self.val
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Platformer")
